@@ -7,7 +7,7 @@ cd clojurescript
 lein jar 2> /dev/null > /dev/null
 
 echo "Cleaning up .."
-mv libclojurescript.jar ../lib/
+mv libclojurescript.jar ../
 cd .. && rm clojurescript -rf
 
 echo "Success !"
