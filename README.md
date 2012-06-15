@@ -3,6 +3,8 @@ Clojurescript-Lua
 
 Welcome, this is the repository for the version of clojurescript which will, soon, be running on Lua :)
 
+It is also a proof of concept of the fact that you can now use the clojurescript analyzer as a library !
+
 You can already test out things by following the getting started guide
 
 ### Getting started
