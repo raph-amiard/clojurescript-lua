@@ -3,6 +3,7 @@
                  [org.clojure/clojure-contrib "1.2.0"]]
   :plugins [[lein-swank "1.4.0"]
             [lein-pprint "1.1.1"]]
-  :extra-classpath-dirs ["lib/libclojurescript.jar"]
+  :extra-classpath-dirs ["libclojurescript.jar"]
   :source-path "src"
+  :main cljs.lua.compiler
 )
