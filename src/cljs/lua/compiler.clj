@@ -9,6 +9,9 @@
 (def ^:dynamic *position* nil)
 (def ^:dynamic *finalizer* nil)
 
+(defn in-expr? [env]
+  (= :expr (:context env)))
+
 (def lua-reserved
   #{})
 
@@ -29,6 +32,8 @@
   (interpose "," xs))
 
 (defn- escape-char [^Character c]
+  c)
+(comment
   (let [cp (.hashCode c)]
     (case cp
       ; Handle printable escapes before ASCII
@@ -43,6 +48,7 @@
       (if (< 31 cp 127)
         c ; Print simple ASCII characters
         (format "\\u%04X" cp))))) ; Any other character is Unicode
+
 
 (defn- escape-string [^CharSequence s]
   (let [sb (StringBuilder. (count s))]
@@ -101,7 +107,7 @@
     (emits \/ (.replaceAll (re-matcher #"/" pattern) "\\\\/") \/ flags)))
 
 (defmethod emit-constant clojure.lang.Keyword [x]
-           (emits \" "\\uFDD0" \'
+           (emits \" "\\239\\183\\144" \'
                   (if (namespace x)
                     (str (namespace x) "/") "")
                   (name x)
@@ -268,10 +274,9 @@
 
 (defmethod emit :if
   [{:keys [test then else env unchecked]}]
-  (let [context (:context env)
-        checked (not (or unchecked (safe-test? test)))
+  (let [checked (not (or unchecked (safe-test? test)))
         test-str (str (when checked "cljs.core.truth_") "(" (emit-str test) ")")]
-    (if (= :expr context)
+    (if (in-expr? env)
       (emits "(function () if " test-str " then return " then " else return " else " end)()")
       (do
         (emitln "if " test-str " then")
@@ -280,9 +285,11 @@
 
 (defmethod emit :throw
   [{:keys [throw env]}]
-  (if (= :expr (:context env))
-    (emits "(function() error(" throw "))()")
-    (emitln "error(" throw ")")))
+  (do
+    (when (in-expr? env) (emits "(function()"))
+    (when *finalizer* (emits *finalizer* "();"))
+    (emitln "error(" throw ")")
+    (when (in-expr? env) (emits ")()"))))
 
 (defn emit-comment
   "Emit a nicely formatted comment string."
@@ -302,12 +309,11 @@
 (defmethod emit :def
   [{:keys [name init env doc export]}]
   (when init
-    (let [mname (munge name)
-          is-expr (= :expr (:context env))]
+    (let [mname (munge name)]
       (emit-comment doc (:jsdoc init))
-      (when is-expr (emits "function () "))
+      (when (in-expr? env) (emits "function () "))
       (emitln mname " = " init)
-      (when is-expr (emits "; return " mname)))))
+      (when (in-expr? env) (emits "; return " mname)))))
 
 (defn emit-apply-to
   [{:keys [name params env]}]
@@ -469,53 +475,50 @@
 
 (defmethod emit :do
   [{:keys [statements ret env]}]
-  (let [context (:context env)]
-    (when (and statements (= :expr context)) (emitln "(function ()"))
-    ;(when statements (emitln "{"))
-    (emit-block context statements ret)
-    ;(when statements (emits "}"))
-    (when (and statements (= :expr context)) (emitln "end)()"))))
+  (do
+    (when (and statements (in-expr? env)) (emitln "(function ()"))
+    (emit-block (:context env) statements ret)
+    (when (and statements (in-expr? env)) (emitln "end)()"))))
 
 ;; TODO
 (defmethod emit :try*
   [{:keys [env try catch name finally]}]
   (let [context (:context env)
-        subcontext (if (= :expr context) :return context)]
-    (if (or name finally)
-      (let [finally-sym (gensym "finally_func")
-            do-catch-sym (gensym "do_catch")]
-        
-        (when (= :expr context) (emits "(function ()"))
-        
-        ;; Finalizer func
-        (when finally
-          (let [{:keys [statements ret]} finally]
-            (assert (not= :constant (:op ret)) "finally block cannot contain constant")
-            (emitln "local function " finally-sym "()")
-            (emit-block subcontext statements ret)
-            (emitln "end")))
-
-        (binding [*finalizer* finally-sym]
-          ;; Try block
-          (emitln do-catch-sym ", " name " = pcall(function()")
-          (let [{:keys [statements ret]} try]
-            (emit-block subcontext statements ret))
-          (emitln "end)")
-          
-          ;; Catch block
-          (when (and name catch)
-            (emitln "if not " do-catch-sym " then")
+        subcontext (if (= :expr context) :return context)
+        finally-sym (gensym "finally_func")
+        success-sym (gensym "success")
+        name (if name name (gensym "exception"))]
+      
+      (when (in-expr? env)  (emits "(function ()"))
+      
+      ;; Finalizer func
+      (when finally
+        (let [{:keys [statements ret]} finally]
+          (assert (not= :constant (:op ret)) "finally block cannot contain constant")
+          (emitln "local function " finally-sym "()")
+          (emit-block subcontext statements ret)
+          (emitln "end")))
+      
+      ;; Try block
+      (emitln success-sym ", " name " = pcall(function()")
+      (let [{:keys [statements ret]} try]
+        (emit-block subcontext statements ret))
+      (emitln "end)")
+      
+      (binding [*finalizer* (if finally finally-sym nil)]
+        ;; Catch block
+        (let [finalize-call (when finally (str *finalizer* "()"))]
+          (emitln "if " success-sym " == false then")
+          (if (and name catch)
             (let [{:keys [statements ret]} catch]
               (emit-block subcontext statements ret))
-            (emitln finally-sym "()")
-            (emitln "else return " name)
-            (emitln "end")))
-        
-        (when (= :expr context) (emits "end)()")))
-      (let [{:keys [statements ret]} try]
-        (when (and statements (= :expr context)) (emits "(function ()"))
-        (emit-block subcontext statements ret)
-        (when (and statements (= :expr context)) (emits "end)()"))))))
+            (emitln finalize-call "; error(" name ")"))
+          (emitln "else")
+          (emitln finalize-call)
+          (when (in-expr? env) (emitln "return " name))
+          (emitln "end")))
+      
+      (when (= :expr context) (emits "end)()"))))
 
 (defmethod emit :let
   [{:keys [bindings statements ret env loop]}]
