@@ -330,6 +330,44 @@
 (defn to-property [sym]
   (symbol (core/str "-" sym)))
 
+
+;; Extend type definition
+
+(defn form->fn
+  "Transform a form of the type ([args] body) into (fn [this args] body)"
+  [[args body]]
+  `(fn ~args ~body))
+
+(defn get-type-method
+  [tsym method]
+  `(.. ~tsym -proto_methods ~(to-property method)))
+
+(defn forms->fns
+   [type-sym named-forms]
+   (map (fn [[name & methods :as form]]
+          `(set! ~(get-type-method type-sym name) ~(with-meta `(fn ~methods) (meta form))))
+        named-forms))
+(comment
+  (defmacro extend-type [tsym & impls]
+    (let [resolve #(let [ret (:name (cljs.analyzer/resolve-var (dissoc &env :locals) %))]
+                     (assert ret (core/str "Can't resolve: " %))
+                     ret)
+          impl-map (loop [ret {} s impls]
+                     (if (seq s)
+                       (recur (assoc ret (first s) (take-while seq? (next s)))
+                              (drop-while seq? (next s)))
+                       ret))
+          warn-if-not-protocol #(when-not (= 'Object %)
+                                  (if cljs.analyzer/*cljs-warn-on-undeclared*
+                                    (if-let [var (cljs.analyzer/resolve-existing-var (dissoc &env :locals) %)]
+                                      (when-not (:protocol-symbol var)
+                                        (cljs.analyzer/warning &env
+                                                               (core/str "WARNING: Symbol " % " is not a protocol")))
+                                      (cljs.analyzer/warning &env
+                                                             (core/str "WARNING: Can't resolve protocol symbol " %)))))]
+      `(do ~@(mapcat (fn [[proto-sym forms]] (forms->fns tsym forms)) impl-map)))))
+    
+
 (defmacro extend-type [tsym & impls]
   (let [resolve #(let [ret (:name (cljs.analyzer/resolve-var (dissoc &env :locals) %))]
                    (assert ret (core/str "Can't resolve: " %))
@@ -361,7 +399,7 @@
         `(do ~@(mapcat assign-impls impl-map)))
       (let [t (resolve tsym)
             prototype-prefix (fn [sym]
-                               `(.. ~tsym -prototype ~(to-property sym)))
+                               `(.. ~tsym -prot_methods ~(to-property sym)))
             assign-impls (fn [[p sigs]]
                            (warn-if-not-protocol p)
                            (let [psym (resolve p)
@@ -406,6 +444,7 @@
                                                             meths)))))
                                                sigs)))))]
         `(do ~@(mapcat assign-impls impl-map))))))
+
 
 (defn- prepare-protocol-masks [env t impls]
   (let [resolve #(let [ret (:name (cljs.analyzer/resolve-var (dissoc env :locals) %))]
@@ -585,8 +624,8 @@
         methods (if (core/string? (first doc+methods)) (next doc+methods) doc+methods)
         expand-sig (fn [fname slot sig]
                      `(~sig
-                       (if (and ~(first sig) (. ~(first sig) ~(symbol (core/str "-" slot)))) ;; Property access needed here.
-                         (. ~(first sig) ~slot ~@sig)
+                       (if (and ~(first sig) (.. ~(first sig) -prot_methods ~(symbol (core/str "-" slot)))) ;; Property access needed here.
+                         (.. ~(first sig) -prot_methods (~slot ~@sig))
                          ((or
                            (aget ~(fqn fname) (goog.typeOf ~(first sig)))
                            (aget ~(fqn fname) "_")
