@@ -1,4 +1,4 @@
-(ns cljs.lua.compiler
+0;271;0c(ns cljs.lua.compiler
   (:refer-clojure :exclude [munge])
   (:require [cljs.analyzer :as ana]
             [clojure.java.io :as io]
@@ -181,7 +181,11 @@
 
 (defmethod emit :var
   [{:keys [info env] :as arg}]
-  (emit-wrap env (emits (munge (:name info)))))
+  (let [n (:name info)
+        n (if (= (namespace n) "lua")
+            (name n)
+            n)]
+  (emit-wrap env (emits (munge n)))))
 
 (defmethod emit :meta
   [{:keys [expr meta env]}]
@@ -347,7 +351,7 @@
   (emit-wrap env
              (emitln "(function (" (comma-sep (map munge params)) ")")
              (when gthis
-               (emitln "local " gthis " = this"))
+               (emitln "local " gthis " = " (munge (first params))))
              (when recurs (emitln "while true do"))
              (emit-block :return statements ret)
              (when recurs
@@ -378,7 +382,7 @@
                                                (concat (butlast params) ["..."])
                                                params)) ")")
      (when gthis
-       (emitln "local " gthis " = this;"))
+       (emitln "local " gthis " = " (munge (first params))))
      (when variadic
        (emitln "local " (last params) " = cljs.core.array_seq({...},0);"))
      
@@ -575,7 +579,7 @@
         opt-not? (and (= (:name info) 'cljs.core/not)
                       (= (infer-tag (first (:args expr))) 'boolean))
         ns (:ns info)
-        js? (= ns 'js)
+        lua? (= ns 'lua)
         keyword? (and (= (-> f :op) :constant)
                       (keyword? (-> f :form)))
         [f variadic-invoke]
@@ -623,7 +627,7 @@
                (when-not (zero? mfa) ",")
                "cljs.core.array_seq([" (comma-sep (drop mfa args)) "], 0))"))
        
-       (or fn? js?)
+       (or fn? lua?)
        (emits f "(" (comma-sep args)  ")")
        
        :else
@@ -660,12 +664,14 @@
     (emitln "-- @constructor")
     (emitln "--]]")
     (emitln (munge t) " = {}")
+    (emitln (munge t) ".prot_methods = {}")
     (emitln (munge t) ".new = (function (" (comma-sep fields) ")")
     (emitln "local instance = {}")
+    (emitln "instance.prot_methods = " (munge t) ".prot_methods")
     (doseq [fld fields]
       (emitln "instance." fld " = " fld))
-    (doseq [[pno pmask] pmasks]
-      (emitln "instance.cljs__lang__protocol_mask__partition" pno "__ = " pmask))
+    (comment (doseq [[pno pmask] pmasks]
+               (emitln "instance.cljs__lang__protocol_mask__partition" pno "__ = " pmask)))
     (emitln "return instance")
     (emitln "end)")))
 
