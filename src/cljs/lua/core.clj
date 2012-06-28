@@ -81,11 +81,11 @@
 
 ;; internal - do not use.
 (defmacro coercive-not [x]
-  (bool-expr (list 'js* "(!~{})" x)))
+  (bool-expr (list 'js* "(not ~{})" x)))
 
 ;; internal - do not use.
 (defmacro coercive-not= [x y]
-  (bool-expr (list 'js* "(~{} != ~{})" x y)))
+  (bool-expr (list 'js* "(~{} ~= ~{})" x y)))
 
 ;; internal - do not use.
 (defmacro coercive-= [x y]
@@ -219,7 +219,7 @@
   (list 'js* "(~{} ^ (1 << ~{}))" x n))
 
 (defmacro bit-test [x n]
-  (list 'js* "((~{} & (1 << ~{})) != 0)" x n))
+  (list 'js* "((~{} & (1 << ~{})) ~= 0)" x n))
 
 (defmacro bit-shift-left [x n]
   (list 'js* "(~{} << ~{})" x n))
@@ -293,11 +293,9 @@
   (core/str (-> (core/str psym) (.replaceAll "\\." "__") (.replaceAll "/" "__")) "__"))
 
 (def #^:private base-type
-     {nil "null"
-      'object "object"
+     {nil "nil"
       'string "string"
       'number "number"
-      'array "array"
       'function "function"
       'boolean "boolean"
       'default "_"})
@@ -330,6 +328,10 @@
 (defn to-property [sym]
   (symbol (core/str "-" sym)))
 
+(def prot-functions-table 'lua/basic_types_prot_functions)
+
+(defn get-basic-type-method [tsym method]
+  `(aget (.. ~prot-functions-table ~(to-property method)) ~tsym))
 
 ;; Extend type definition
 
@@ -366,7 +368,6 @@
                                       (cljs.analyzer/warning &env
                                                              (core/str "WARNING: Can't resolve protocol symbol " %)))))]
       `(do ~@(mapcat (fn [[proto-sym forms]] (forms->fns tsym forms)) impl-map)))))
-    
 
 (defmacro extend-type [tsym & impls]
   (let [resolve #(let [ret (:name (cljs.analyzer/resolve-var (dissoc &env :locals) %))]
@@ -396,10 +397,10 @@
                                    (map (fn [[f & meths :as form]]
                                           `(aset ~(symbol (core/str pfn-prefix f)) ~t ~(with-meta `(fn ~@meths) (meta form))))
                                         sigs))))]
-        `(do ~@(mapcat assign-impls impl-map)))
+        `(do ~@(mapcat assign-impls impl-map) nil))
       (let [t (resolve tsym)
             prototype-prefix (fn [sym]
-                               `(.. ~tsym -prot_methods ~(to-property sym)))
+                               `(.. ~tsym -proto_methods ~(to-property sym)))
             assign-impls (fn [[p sigs]]
                            (warn-if-not-protocol p)
                            (let [psym (resolve p)
@@ -508,11 +509,13 @@
          (deftype* ~t ~fields ~pmasks)
          (set! (.-cljs__lang__type ~t) true)
          (set! (.-cljs__lang__ctorPrSeq ~t) (fn [this#] (list ~(core/str r))))
-         (extend-type ~t ~@(dt->et impls fields true)))
+         (extend-type ~t ~@(dt->et impls fields true))
+         nil)
       `(do
          (deftype* ~t ~fields ~pmasks)
          (set! (.-cljs__lang__type ~t) true)
-         (set! (.-cljs__lang__ctorPrSeq ~t) (fn [this#] (list ~(core/str r))))))))
+         (set! (.-cljs__lang__ctorPrSeq ~t) (fn [this#] (list ~(core/str r))))
+         nil))))
 
 (defn- emit-defrecord
   "Do not use this directly - use defrecord"
@@ -624,10 +627,10 @@
         methods (if (core/string? (first doc+methods)) (next doc+methods) doc+methods)
         expand-sig (fn [fname slot sig]
                      `(~sig
-                       (if (and ~(first sig) (.. ~(first sig) -prot_methods ~(symbol (core/str "-" slot)))) ;; Property access needed here.
+                       (if (and ~(first sig) (.. ~(first sig) -proto_methods ~(symbol (core/str "-" slot)))) ;; Property access needed here.
                          (.. ~(first sig) -prot_methods (~slot ~@sig))
                          ((or
-                           (aget ~(fqn fname) (goog.typeOf ~(first sig)))
+                           ~(get-basic-type-method (lua/type (first sig)) fname)
                            (aget ~(fqn fname) "_")
                            (throw (missing-protocol
                                     ~(core/str psym "." fname) ~(first sig))))
@@ -645,7 +648,8 @@
        (set! ~'*unchecked-if* true)
        (def ~psym (~'js* "{}"))
        ~@(map method methods)
-       (set! ~'*unchecked-if* false))))
+       (set! ~'*unchecked-if* false)
+       nil)))
 
 (defmacro satisfies?
   "Returns true if x satisfies the protocol"
@@ -658,7 +662,7 @@
     `(let [~xsym ~x]
        (if ~xsym
          (if (or ~(if bit `(unsafe-bit-and (. ~xsym ~msym) ~bit))
-                 ~(bool-expr `(. ~xsym ~(symbol (core/str "-" prefix)))))
+                 ~(bool-expr (get-type-method xsym prefix)))
            true
            (if (coercive-not (. ~xsym ~msym))
              (cljs.core/type_satisfies_ ~psym ~xsym)

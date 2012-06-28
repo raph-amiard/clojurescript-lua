@@ -1,4 +1,4 @@
-0;271;0c(ns cljs.lua.compiler
+(ns cljs.lua.compiler
   (:refer-clojure :exclude [munge])
   (:require [cljs.analyzer :as ana]
             [clojure.java.io :as io]
@@ -8,6 +8,7 @@
 
 (def ^:dynamic *position* nil)
 (def ^:dynamic *finalizer* nil)
+(def ^:dynamic *loop-var* nil)
 
 (defn in-expr? [env]
   (= :expr (:context env)))
@@ -92,7 +93,7 @@
   nil)
 
 (defmulti emit-constant class)
-(defmethod emit-constant nil [x] (emits "null"))
+(defmethod emit-constant nil [x] (emits "nil"))
 (defmethod emit-constant Long [x] (emits x))
 (defmethod emit-constant Integer [x] (emits x)) ; reader puts Integers in metadata
 (defmethod emit-constant Double [x] (emits x))
@@ -177,7 +178,7 @@
      (when-not (= :expr (:context env#)) (emitln ""))))
 
 (defmethod emit :no-op
-  [m] (emitln "noop()"))
+  [m] (emitln "do end"))
 
 (defmethod emit :var
   [{:keys [info env] :as arg}]
@@ -482,7 +483,7 @@
   (do
     (when (and statements (in-expr? env)) (emitln "(function ()"))
     (emit-block (:context env) statements ret)
-    (when (and statements (in-expr? env)) (emitln "end)()"))))
+    (when (and statements (in-expr? env)) (emits "end)()"))))
 
 ;; TODO
 (defmethod emit :try*
@@ -527,27 +528,30 @@
 (defmethod emit :let
   [{:keys [bindings statements ret env loop]}]
   (let [context (:context env)]
-    (when (= :expr context) (emitln "(function ()"))
-    (doseq [{:keys [name init]} bindings]
-      (emitln "local " (munge name) " = " init))
-    (when loop (emitln "while true do"))
-    (emit-block (if (= :expr context) :return context) statements ret)
-    (when loop
-      (emitln "break")
-      (emitln "end"))
-    ;(emits "}")
-    (when (= :expr context) (emitln "end)()"))))
+    (binding [*loop-var* (when loop (gensym "loop_var"))]
+      (when (= :expr context) (emitln "(function ()"))
+      (doseq [{:keys [name init]} bindings]
+        (emitln "local " (munge name) " = " init))
+      (when loop
+        (emitln "local " *loop-var* " = true")
+        (emitln "while " *loop-var* " do")
+        (emitln *loop-var* " = false"))
+      (emit-block (if (= :expr context) :return context) statements ret)
+      (when loop
+        (emitln "end"))
+                                        ;(emits "}")
+      (when (= :expr context) (emits "end)()")))))
 
 (defmethod emit :recur
   [{:keys [frame exprs env]}]
   (let [temps (vec (take (count exprs) (repeatedly gensym)))
         names (:names frame)]
     (emitln "do")
+    (emitln *loop-var* " = true ")
     (dotimes [i (count exprs)]
-      (emitln "var " (temps i) " = " (exprs i)))
+      (emitln "local " (temps i) " = " (exprs i)))
     (dotimes [i (count exprs)]
       (emitln (munge (names i)) " = " (temps i)))
-    (emitln "continue")
     (emitln "end")))
 
 (defmethod emit :letfn
@@ -557,7 +561,7 @@
     (doseq [{:keys [name init]} bindings]
       (emitln "local " (munge name) " = " init))
     (emit-block (if (= :expr context) :return context) statements ret)
-    (when (= :expr context) (emits "end)()"))))
+    (when (= :expr context) (emitln "end)()"))))
 
 (defn protocol-prefix [psym]
   (str (-> (str psym) (.replace \. \$) (.replace \/ \$)) "$"))
@@ -649,10 +653,9 @@
 
 (defmethod emit :ns
   [{:keys [name requires uses requires-macros env]}]
-  (emitln "require 'builtins'")
-  (emitln "__builtins.provide('" (munge name) "')")
-  (when-not (= name 'cljs.core)
-    (emitln "require 'cljs.core'"))
+  (emitln "builtins.create_namespace('" (munge name) "')")
+  (comment (when-not (= name 'cljs.core)
+             (emitln "require 'cljs.core'")))
   (doseq [lib (into (vals requires) (distinct (vals uses)))]
     (emitln "require '" (munge lib) "'")))
 
@@ -664,10 +667,10 @@
     (emitln "-- @constructor")
     (emitln "--]]")
     (emitln (munge t) " = {}")
-    (emitln (munge t) ".prot_methods = {}")
+    (emitln (munge t) ".proto_methods = {}")
     (emitln (munge t) ".new = (function (" (comma-sep fields) ")")
     (emitln "local instance = {}")
-    (emitln "instance.prot_methods = " (munge t) ".prot_methods")
+    (emitln "instance.proto_methods = " (munge t) ".proto_methods")
     (doseq [fld fields]
       (emitln "instance." fld " = " fld))
     (comment (doseq [[pno pmask] pmasks]
@@ -705,3 +708,33 @@
 (defmacro lua [form]
   `(ana/with-core-macros "/cljs/lua/core"
      (emit (ana/analyze {:ns (@ana/namespaces 'cljs.user) :context :statement :locals {}} '~form))))
+
+(defn read-form [s]
+  (try
+    (read-string s)
+    (catch Exception e
+      :incomplete)))
+
+(defn server-emit-form [env form]
+  (do
+    (println :begin)
+    (emit (ana/analyze env form))
+    (println :end)))
+
+(defn -main []
+  (do
+    (println "Cljs/Lua compiler service")
+    (ana/with-core-macros "/cljs/lua/core"
+      (binding [ana/*cljs-ns* 'cljs.user]
+        (let [env {:ns (@ana/namespaces 'cljs.user) :context :return :locals {}}]
+          (server-emit-form env '(ns cljs.user))
+          (while true
+            (println :ready)
+            (let [sb (StringBuilder.)]
+              (loop []
+                (do
+                  (.append sb (str (read-line) "\n"))
+                  (let [form (read-form (.toString sb))]
+                    (if (= form :incomplete)
+                      (do (println form) (recur))
+                      (server-emit-form env form))))))))))))
