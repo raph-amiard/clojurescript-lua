@@ -630,7 +630,7 @@
                        (if (and ~(first sig) (.. ~(first sig) -proto_methods ~(symbol (core/str "-" slot)))) ;; Property access needed here.
                          (.. ~(first sig) -prot_methods (~slot ~@sig))
                          ((or
-                           ~(get-basic-type-method (lua/type (first sig)) fname)
+                           ~(get-basic-type-method `(lua/type ~(first sig)) fname)
                            (aget ~(fqn fname) "_")
                            (throw (missing-protocol
                                     ~(core/str psym "." fname) ~(first sig))))

@@ -3,12 +3,15 @@
   (:require [cljs.analyzer :as ana]
             [clojure.java.io :as io]
             [clojure.string :as string]
-            [cljs.tagged-literals :as tags])
-  (:import java.lang.StringBuilder))
+            [cljs.tagged-literals :as tags]
+            [clojure.data.json :as json])
+  (:import java.lang.StringBuilder
+           java.io.PrintWriter))
 
 (def ^:dynamic *position* nil)
 (def ^:dynamic *finalizer* nil)
 (def ^:dynamic *loop-var* nil)
+(def ^:dynamic *emit-comments* false)
 
 (defn in-expr? [env]
   (= :expr (:context env)))
@@ -299,17 +302,19 @@
 (defn emit-comment
   "Emit a nicely formatted comment string."
   [doc jsdoc]
-  (let [docs (when doc [doc])
-        docs (if jsdoc (concat docs jsdoc) docs)
-        docs (remove nil? docs)]
-    (letfn [(print-comment-lines [e] (doseq [next-line (string/split-lines e)]
-                                       (emitln "  " (string/trim next-line))))]
-      (when (seq docs)
-        (emitln "--[")
-        (doseq [e docs]
-          (when e
-            (print-comment-lines e)))
-        (emitln "--]")))))
+
+  (when *emit-comments*
+    (let [docs (when doc [doc])
+          docs (if jsdoc (concat docs jsdoc) docs)
+          docs (remove nil? docs)]
+      (letfn [(print-comment-lines [e] (doseq [next-line (string/split-lines e)]
+                                         (emitln "  " (string/trim next-line))))]
+        (when (seq docs)
+          (emitln "--[")
+          (doseq [e docs]
+            (when e
+              (print-comment-lines e)))
+          (emitln "--]"))))))
 
 (defmethod emit :def
   [{:keys [name init env doc export]}]
@@ -709,32 +714,47 @@
   `(ana/with-core-macros "/cljs/lua/core"
      (emit (ana/analyze {:ns (@ana/namespaces 'cljs.user) :context :statement :locals {}} '~form))))
 
-(defn read-form [s]
-  (try
-    (read-string s)
-    (catch Exception e
-      :incomplete)))
-
-(defn server-emit-form [env form]
-  (do
-    (println :begin)
-    (emit (ana/analyze env form))
-    (println :end)))
+(def lua-interp "lua")
+(def ^:dynamic *repl-verbose* true)
+(def ^:dynamic *repl-exec* true)
+(def special-fns
+  {'switch-verbose (fn [] (set! *repl-verbose* (not *repl-verbose*)))
+   'switch-exec (fn [] (set! *repl-exec* (not *repl-exec*)))})
+(def special-fns-set (set (keys special-fns)))
 
 (defn -main []
-  (do
-    (println "Cljs/Lua compiler service")
-    (ana/with-core-macros "/cljs/lua/core"
-      (binding [ana/*cljs-ns* 'cljs.user]
-        (let [env {:ns (@ana/namespaces 'cljs.user) :context :return :locals {}}]
-          (server-emit-form env '(ns cljs.user))
-          (while true
-            (println :ready)
-            (let [sb (StringBuilder.)]
-              (loop []
+  (ana/with-core-macros "/cljs/lua/core"
+    (println "Cljs/Lua repl")
+    (binding [ana/*cljs-ns* 'cljs.user
+              *repl-verbose* true
+              *repl-exec* true]
+      (let [new-env (fn [] {:ns (@ana/namespaces ana/*cljs-ns*) :context :return :locals {}})
+            pb (ProcessBuilder. [lua-interp "cljs/exec_server.lua"])
+            lua-process (.start pb)
+            rdr (io/reader (.getInputStream lua-process))
+            eval-form (fn [env form]
+                        (let [lua-code (with-out-str (emit (ana/analyze env form)))]
+                          (when *repl-exec*
+                            (binding [*out* (PrintWriter. (.getOutputStream lua-process))]
+                              (println (json/json-str {:action :exec :body lua-code}))))
+                          {:lua-code lua-code :response (when *repl-exec* (json/read-json rdr))}))]
+        (.readLine rdr)
+        (eval-form (new-env) '(ns cljs.user))        
+        (while true
+            (.print System/out (str ana/*cljs-ns* " > "))
+            (.flush (System/out))
+            (let [env (new-env)
+                  form (read)
+                  special-fn? (contains? special-fns-set (first form))
+                  res (when (not special-fn?) (eval-form env form))]
+              (if special-fn?
+                (println (apply (special-fns (first form)) (rest form)))
                 (do
-                  (.append sb (str (read-line) "\n"))
-                  (let [form (read-form (.toString sb))]
-                    (if (= form :incomplete)
-                      (do (println form) (recur))
-                      (server-emit-form env form))))))))))))
+                  (when *repl-verbose*
+                    (println "---- LUA CODE ----")
+                    (println (:lua-code res)))
+                  (let [resp (:response res)]
+                    (when resp
+                      (if (= (:status resp) "OK")
+                        (println (:body resp))
+                        (println "ERROR"))))))))))))

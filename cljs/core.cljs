@@ -35,7 +35,7 @@
 (defn truth_
   "Internal - do not use!"
   [x]
-  (js* "(~{x} ~= nil && ~{x} ~= false)"))
+  (js* "(~{x} ~= nil and ~{x} ~= false)"))
 
 (set! *unchecked-if* true)
 (defn ^boolean type_satisfies_
