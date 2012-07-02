@@ -58,28 +58,28 @@
   *main-cli-fn* nil)
 
 (defn missing-protocol [proto obj]
-  (js/Error
-   (.join (array "No protocol method " proto
-                 " defined for type " (goog/typeOf obj) ": " obj) "")))
+  (lua/error
+   (strcat "No protocol method " proto
+           " defined for type " (goog/typeOf obj) ": " obj) ""))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; arrays ;;;;;;;;;;;;;;;;
 
 (defn aclone
   "Returns a javascript array, cloned from the passed in array"
   [array-like]
-  (.slice array-like))
+  (builtins/table_copy array-like))
 
-(defn array
-  "Creates a new javascript array.
-@param {...*} var_args" ;;array is a special case, don't emulate this doc string
-  [var-args]            ;; [& items]
-  (.call (.-slice (.-prototype js/Array)) (js* "arguments")))
+;(defn array
+;  "Creates a new javascript array.
+;  @param {...*} var_args" ;;array is a special case, don't emulate this doc string
+;  [var-args]            ;; [& items]
+;  (.call (.-slice (.-prototype js/Array)) (js* "arguments")))
 
 (defn make-array
   ([size]
-     (js/Array. size))
+     (array))
   ([type size]
-     (make-array size)))
+     (array)))
 
 (declare apply)
 
@@ -106,7 +106,7 @@
   ([aseq]
      (into-array nil aseq))
   ([type aseq]
-     (reduce (fn [a x] (.push a x) a) (array) aseq)))
+     (reduce (fn [a x] (.push a x) a) (builtins/array) aseq)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;; core protocols ;;;;;;;;;;;;;
 
@@ -915,7 +915,7 @@ reduces them without incurring seq initialization"
      (apply gobject/create keyvals)))
 
 (defn js-keys [obj]
-  (let [keys (array)]
+  (let [keys (builtins/array)]
     (goog.object/forEach obj (fn [val key obj] (.push keys key)))
     keys))
 
@@ -1899,7 +1899,7 @@ reduces them without incurring seq initialization"
 (defn to-array
   "Naive impl of to-array as a start."
   [s]
-  (let [ary (array)]
+  (let [ary (builtins/array)]
     (loop [s s]
       (if (seq s)
         (do (. ary push (first s))
@@ -2772,7 +2772,7 @@ reduces them without incurring seq initialization"
   (-invoke [coll k not-found]
     (-lookup coll k not-found)))
 
-(set! cljs.core.Vector/EMPTY (Vector. nil (array) 0))
+(set! cljs.core.Vector/EMPTY (Vector. nil (builtins/array) 0))
 
 (set! cljs.core.Vector/fromArray (fn [xs] (Vector. nil xs nil)))
 
@@ -2970,7 +2970,7 @@ reduces them without incurring seq initialization"
 
   IKVReduce
   (-kv-reduce [v f init]
-    (let [step-init (array 0 init)] ; [step 0 init init]
+    (let [step-init (builtins/array 0 init)] ; [step 0 init init]
       (loop [i 0]
         (if (< i cnt)
           (let [arr (array-for v i)
