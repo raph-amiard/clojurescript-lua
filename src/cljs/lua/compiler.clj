@@ -3,10 +3,8 @@
   (:require [cljs.analyzer :as ana]
             [clojure.java.io :as io]
             [clojure.string :as string]
-            [cljs.tagged-literals :as tags]
-            [clojure.data.json :as json])
-  (:import java.lang.StringBuilder
-           java.io.PrintWriter))
+            [cljs.tagged-literals :as tags])
+  (:import java.lang.StringBuilder))
 
 (def ^:dynamic *position* nil)
 (def ^:dynamic *finalizer* nil)
@@ -654,7 +652,9 @@
 
 (defmethod emit :set!
   [{:keys [target val env]}]
-  (emit-wrap env (emits target " = " val)))
+  (when (in-expr? env) (emitln "(function ()"))
+  (emitln target " = " val)
+  (when (in-expr? env) (emitln "return " target ) (emitln " end)()")))
 
 (defmethod emit :ns
   [{:keys [name requires uses requires-macros env]}]
@@ -698,7 +698,7 @@
   (emit-wrap env
              (if field
                (emits target "." (munge field #{}))
-               (emits target "." (munge method #{}) "("
+               (emits target ":" (munge method #{}) "("
                       (comma-sep args)
                       ")"))))
 
@@ -713,48 +713,3 @@
 (defmacro lua [form]
   `(ana/with-core-macros "/cljs/lua/core"
      (emit (ana/analyze {:ns (@ana/namespaces 'cljs.user) :context :statement :locals {}} '~form))))
-
-(def lua-interp "lua")
-(def ^:dynamic *repl-verbose* true)
-(def ^:dynamic *repl-exec* true)
-(def special-fns
-  {'switch-verbose (fn [] (set! *repl-verbose* (not *repl-verbose*)))
-   'switch-exec (fn [] (set! *repl-exec* (not *repl-exec*)))})
-(def special-fns-set (set (keys special-fns)))
-
-(defn -main []
-  (ana/with-core-macros "/cljs/lua/core"
-    (println "Cljs/Lua repl")
-    (binding [ana/*cljs-ns* 'cljs.user
-              *repl-verbose* true
-              *repl-exec* true]
-      (let [new-env (fn [] {:ns (@ana/namespaces ana/*cljs-ns*) :context :return :locals {}})
-            pb (ProcessBuilder. [lua-interp "cljs/exec_server.lua"])
-            lua-process (.start pb)
-            rdr (io/reader (.getInputStream lua-process))
-            eval-form (fn [env form]
-                        (let [lua-code (with-out-str (emit (ana/analyze env form)))]
-                          (when *repl-exec*
-                            (binding [*out* (PrintWriter. (.getOutputStream lua-process))]
-                              (println (json/json-str {:action :exec :body lua-code}))))
-                          {:lua-code lua-code :response (when *repl-exec* (json/read-json rdr))}))]
-        (.readLine rdr)
-        (eval-form (new-env) '(ns cljs.user))        
-        (while true
-            (.print System/out (str ana/*cljs-ns* " > "))
-            (.flush (System/out))
-            (let [env (new-env)
-                  form (read)
-                  special-fn? (contains? special-fns-set (first form))
-                  res (when (not special-fn?) (eval-form env form))]
-              (if special-fn?
-                (println (apply (special-fns (first form)) (rest form)))
-                (do
-                  (when *repl-verbose*
-                    (println "---- LUA CODE ----")
-                    (println (:lua-code res)))
-                  (let [resp (:response res)]
-                    (when resp
-                      (if (= (:status resp) "OK")
-                        (println (:body resp))
-                        (println "ERROR"))))))))))))

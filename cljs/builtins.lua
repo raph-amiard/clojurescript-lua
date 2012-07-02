@@ -18,3 +18,15 @@ function builtins.create_namespace(str)
       current_table = current_table[ns_tables[i]]
    end
 end
+
+function builtins.table_copy(t)
+   local t2 = {}
+   for k,v in pairs(t) do
+      t2[k] = v
+   end
+   return t2
+end
+
+function builtins.array(...)
+   return {...}
+end

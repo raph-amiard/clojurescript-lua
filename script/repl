@@ -11,5 +11,5 @@ for next in $DIR/../lib/* $DIR/../src $DIR/../libclojurescript.jar; do
 done
 
 java -server -cp $CLJSC_CP clojure.main -e \
-"(require '[cljs.lua.compiler :as comp])
-(comp/-main)"
+"(require '[cljs.lua.repl :as repl])
+(repl/-main)"

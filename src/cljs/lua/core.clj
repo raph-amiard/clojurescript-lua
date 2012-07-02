@@ -111,13 +111,18 @@
       `(~'js* ~(core/str "(~{}[~{}]" astr ")") ~a ~i ~@idxs))))
 
 (defmacro aset [a i v]
-  (list 'js* "(~{}[~{}] = ~{})" a i v))
+  (list 'js* "~{}[~{}] = ~{}" a i v))
 
 (defmacro +
   ([] 0)
   ([x] x)
   ([x y] (list 'js* "(~{} + ~{})" x y))
   ([x y & more] `(+ (+ ~x ~y) ~@more)))
+
+(defmacro strcat
+  ([x] x)
+  ([x y] (list 'js* "(~{} .. ~{})" x y))
+  ([x y & more] `(strcat (strcat ~x ~y) ~@more)))
 
 (defmacro -
   ([x] (list 'js* "(- ~{})" x))
@@ -296,6 +301,7 @@
      {nil "nil"
       'string "string"
       'number "number"
+      'table "table"
       'function "function"
       'boolean "boolean"
       'default "_"})
@@ -330,8 +336,8 @@
 
 (def prot-functions-table 'lua/basic_types_prot_functions)
 
-(defn get-basic-type-method [tsym method]
-  `(aget (.. ~prot-functions-table ~(to-property method)) ~tsym))
+(defn basic-type-method [method]
+  `(.. ~prot-functions-table ~(to-property method)))
 
 ;; Extend type definition
 
@@ -395,7 +401,7 @@
                                  pfn-prefix (subs (core/str psym) 0 (clojure.core/inc (.indexOf (core/str psym) "/")))]
                              (cons `(aset ~psym ~t true)
                                    (map (fn [[f & meths :as form]]
-                                          `(aset ~(symbol (core/str pfn-prefix f)) ~t ~(with-meta `(fn ~@meths) (meta form))))
+                                          `(aset ~(basic-type-method f)  ~t ~(with-meta `(fn ~@meths) (meta form))))
                                         sigs))))]
         `(do ~@(mapcat assign-impls impl-map) nil))
       (let [t (resolve tsym)
@@ -628,10 +634,10 @@
         expand-sig (fn [fname slot sig]
                      `(~sig
                        (if (and ~(first sig) (.. ~(first sig) -proto_methods ~(symbol (core/str "-" slot)))) ;; Property access needed here.
-                         (.. ~(first sig) -prot_methods (~slot ~@sig))
+                         (.. ~(first sig) -proto_methods (~slot ~@sig))
                          ((or
-                           ~(get-basic-type-method `(lua/type ~(first sig)) fname)
-                           (aget ~(fqn fname) "_")
+                           (aget ~(basic-type-method fname) (lua/type ~(first sig)))
+                           (aget ~(basic-type-method fname) "_")
                            (throw (missing-protocol
                                     ~(core/str psym "." fname) ~(first sig))))
                           ~@sig))))
@@ -639,11 +645,13 @@
                  (let [sigs (take-while vector? sigs)
                        slot (symbol (core/str prefix (name fname)))
                        fname (vary-meta fname assoc :protocol p)]
-                   `(defn ~fname ~@(map (fn [sig]
-                                          (expand-sig fname
-                                                      (symbol (core/str slot "__arity__" (count sig)))
-                                                      sig))
-                                        sigs))))]
+                   `(do
+                      (set! ~(basic-type-method fname) (~'js* "{}"))
+                      (defn ~fname ~@(map (fn [sig]
+                                            (expand-sig fname
+                                                        (symbol (core/str slot "__arity__" (count sig)))
+                                                        sig))
+                                          sigs)))))]
     `(do
        (set! ~'*unchecked-if* true)
        (def ~psym (~'js* "{}"))
@@ -915,7 +923,7 @@
                     (interpose ",")
                     (apply core/str))]
    (concat
-    (list 'js* (core/str "[" xs-str "]"))
+    (list 'js* (core/str "{" xs-str "}"))
     rest)))
 
 (defmacro js-obj [& rest]
