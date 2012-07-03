@@ -5,5 +5,5 @@
             [lein-pprint "1.1.1"]]
   :source-path "src/clj"
   :jar-name "libclojurescript.jar"
-  :extra-classpath-dirs ["src/cljs"]
+  :resources-path "src/cljs"
 )
