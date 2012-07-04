@@ -101,7 +101,7 @@
   (bool-expr (list 'js* "(void 0 === ~{})" x)))
 
 (defmacro identical? [a b]
-  (bool-expr (list 'js* "(~{} === ~{})" a b)))
+  (bool-expr (list 'js* "(~{} == ~{})" a b)))
 
 (defmacro aget
   ([a i]
@@ -1091,4 +1091,3 @@
            (~'f)
            ~(gen-apply-to-helper))))
      (set! ~'*unchecked-if* false)))
-

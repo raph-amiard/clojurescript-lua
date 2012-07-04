@@ -385,6 +385,8 @@
        (when recurs
          (emitln "end")))
 
+     (emitln "end")
+
      (emitln "local " mname " = {}")
      (emitln "local " mname "__func = function (_, " (comma-sep
                                              (if variadic
@@ -681,6 +683,7 @@
     (emitln (munge t) ".new = (function (" (comma-sep fields) ")")
     (emitln "local instance = {}")
     (emitln "instance.proto_methods = " (munge t) ".proto_methods")
+    (emitln "instance.constructor = " (munge t))
     (doseq [fld fields]
       (emitln "instance." fld " = " fld))
     (comment (doseq [[pno pmask] pmasks]
