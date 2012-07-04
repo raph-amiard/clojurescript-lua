@@ -353,15 +353,18 @@
 (defn emit-fn-method
   [{:keys [gthis name variadic params statements ret env recurs max-fixed-arity]}]
   (emit-wrap env
-             (emitln "(function (" (comma-sep (map munge params)) ")")
-             (when gthis
-               (emitln "local " gthis " = " (munge (first params))))
-             (when recurs (emitln "while true do"))
-             (emit-block :return statements ret)
-             (when recurs
-               (emitln "break")
-               (emitln "end"))
-             (emits "end)")))
+             (binding [*loop-var* (when recurs (gensym "loop_var"))]
+               (emitln "(function (" (comma-sep (map munge params)) ")")
+               (when gthis
+                 (emitln "local " gthis " = " (munge (first params))))
+               (when recurs
+                 (emitln "local " *loop-var* " = true")
+                 (emitln "while " *loop-var* " do")
+                 (emitln *loop-var* " = false"))
+               (emit-block :return statements ret)
+               (when recurs
+                 (emitln "end"))
+               (emits "end)"))))
 
 (defn emit-variadic-fn-method
   [{:keys [gthis name variadic params statements ret env recurs max-fixed-arity] :as f}]
@@ -373,12 +376,14 @@
          delegate-name (str mname "__delegate")]
      (emitln "(function () ")
      (emitln "local " delegate-name " = function (" (comma-sep params) ")")
-     (when recurs (emitln "while true do"))
-     (emit-block :return statements ret)
-     (when recurs
-       (emitln "break")
-       (emitln "end"))
-     (emitln "end")
+     (binding [*loop-var* (when recurs (gensym "loop_var"))]
+       (when recurs
+         (emitln "local " *loop-var* " = true")
+         (emitln "while " *loop-var* " do")
+         (emitln *loop-var* " = false"))
+       (emit-block :return statements ret)
+       (when recurs
+         (emitln "end")))
 
      (emitln "local " mname " = {}")
      (emitln "local " mname "__func = function (_, " (comma-sep
