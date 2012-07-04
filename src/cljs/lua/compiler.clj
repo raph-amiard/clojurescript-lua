@@ -698,7 +698,7 @@
   (emit-wrap env
              (if field
                (emits target "." (munge field #{}))
-               (emits target ":" (munge method #{}) "("
+               (emits target "." (munge method #{}) "("
                       (comma-sep args)
                       ")"))))
 

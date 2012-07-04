@@ -2,15 +2,35 @@
   (:require [clojure.java.io :as io]
             [cljs.lua.compiler :as comp]
             [cljs.analyzer :as ana]
+            [cljs.coreloader :as cloader]
             [clojure.data.json :as json])
   (:import  [java.io PrintWriter File FileInputStream FileOutputStream]))
 
 (def lua-interp "lua")
 (def ^:dynamic *repl-verbose* true)
 (def ^:dynamic *repl-exec* true)
+(def next-core-form (atom 0))
+
+(def core-forms-seq
+  (cloader/core-forms-seq (io/resource "core-lua.cljs")
+                          (io/resource "core-lua-extra.cljs")))
+
+(defn new-env [] {:ns (@ana/namespaces ana/*cljs-ns*) :context :return :locals {}})
+
+(defn eval-core-forms [eval-fn n]
+  (doseq [form (take n (drop @next-core-form core-forms-seq))]
+    (println "eval form " (take 2 form) "...")
+    (let [res (eval-fn (new-env) form)]
+      (println "---- LUA CODE ----")
+      (println (:lua-code res)))
+    (println "success !"))
+    (swap! next-core-form + n))
+
 (def special-fns
-  {'switch-verbose (fn [] (set! *repl-verbose* (not *repl-verbose*)))
-   'switch-exec (fn [] (set! *repl-exec* (not *repl-exec*)))})
+  {'switch-verbose (fn [_] (set! *repl-verbose* (not *repl-verbose*)))
+   'switch-exec (fn [_] (set! *repl-exec* (not *repl-exec*)))
+   'eval-core-forms eval-core-forms})
+
 (def special-fns-set (set (keys special-fns)))
 
 (defn create-named-pipe [pfx]
@@ -21,6 +41,7 @@
     (.waitFor (.exec (Runtime/getRuntime) (str "mkfifo " pipe-path)))
     (File. pipe-path)))
 
+
 (defn -main []  
   (ana/with-core-macros "/cljs/lua/core"
     (println "Cljs/Lua repl")    
@@ -28,7 +49,6 @@
               *repl-verbose* true
               *repl-exec* true]      
       (let [;; Function to create a new env
-            new-env (fn [] {:ns (@ana/namespaces ana/*cljs-ns*) :context :return :locals {}})
 
             ;; Lua subprocess
             pb (ProcessBuilder. [lua-interp "cljs/exec_server.lua"])
@@ -60,6 +80,9 @@
         (binding [*out* (PrintWriter. (.getOutputStream lua-process))]
           (println (.getCanonicalPath pipe-in))
           (println (.getCanonicalPath pipe-out)))
+
+        ;; Eval core.cljs forms
+        (eval-core-forms eval-form 65)
         
         ;; Eval common ns form
         (eval-form (new-env) '(ns cljs.user)) 
@@ -73,7 +96,7 @@
                 special-fn? (contains? special-fns-set (first form))
                 res (when (not special-fn?) (eval-form env form))]
             (if special-fn?
-              (println (apply (special-fns (first form)) (rest form)))
+              (println (apply (special-fns (first form)) eval-form (rest form)))
               (do
                 (when *repl-verbose*
                   (println "---- LUA CODE ----")

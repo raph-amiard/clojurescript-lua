@@ -4,6 +4,7 @@
   :plugins [[lein-swank "1.4.0"]
             [lein-pprint "1.1.1"]]
   :extra-classpath-dirs ["libclojurescript.jar"]
+  :resources-path "cljs"
   :source-path "src"
   :main cljs.lua.compiler
 )

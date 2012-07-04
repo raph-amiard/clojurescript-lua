@@ -936,7 +936,7 @@
      rest)))
 
 (defmacro alength [a]
-  (list 'js* "~{}.length" a))
+  (list 'js* "#(~{})" a))
 
 (defmacro aclone [a]
   (list 'js* "~{}.slice()" a))
@@ -1091,3 +1091,4 @@
            (~'f)
            ~(gen-apply-to-helper))))
      (set! ~'*unchecked-if* false)))
+

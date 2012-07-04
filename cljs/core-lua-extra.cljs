@@ -1,0 +1,1 @@
+(def array builtins/array)

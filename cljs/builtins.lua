@@ -19,7 +19,7 @@ function builtins.create_namespace(str)
    end
 end
 
-function builtins.table_copy(t)
+function builtins.array_copy(t)
    local t2 = {}
    for k,v in pairs(t) do
       t2[k] = v
