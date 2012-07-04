@@ -4,10 +4,10 @@ require("cljs.builtins")
 
 actions = {
    exec = function (body)
-      resp = {}
-      func = loadstring(body)
+      local resp = {}
+      local func, error = loadstring(body)
       if func then
-	 result = func()
+	 local result = func()
          io.flush()
 	 if result then 
 	    resp.body = tostring(result)
@@ -15,6 +15,7 @@ actions = {
 	 resp.status = "OK"
       else
 	 resp.status = "ERROR"
+         resp.body = error
       end
       return resp
    end

@@ -20,10 +20,7 @@
 (defn eval-core-forms [eval-fn n]
   (doseq [form (take n (drop @next-core-form core-forms-seq))]
     (println "eval form " (take 2 form) "...")
-    (let [res (eval-fn (new-env) form)]
-      (println "---- LUA CODE ----")
-      (println (:lua-code res)))
-    (println "success !"))
+    (eval-fn (new-env) form))
     (swap! next-core-form + n))
 
 (def special-fns
@@ -48,9 +45,7 @@
     (binding [ana/*cljs-ns* 'cljs.user
               *repl-verbose* true
               *repl-exec* true]      
-      (let [;; Function to create a new env
-
-            ;; Lua subprocess
+      (let [;; Lua subprocess
             pb (ProcessBuilder. [lua-interp "cljs/exec_server.lua"])
             lua-process (.start pb)
             
@@ -67,11 +62,16 @@
             ;; pass it to the lua subproc, and get back the result
             eval-form (fn [env form]
                         (let [lua-code (with-out-str (comp/emit (ana/analyze env form)))]
+                          (when *repl-verbose*
+                            (println "---- LUA CODE ----")
+                            (println lua-code))
                           (when *repl-exec*
                             (binding [*out* @pipe-wr]
-                              (println (json/json-str {:action :exec :body lua-code}))))
-                          (let [raw-resp (.readLine @pipe-rdr)]
-                            {:lua-code lua-code :response (when *repl-exec* (json/read-json raw-resp))})))]
+                              (println (json/json-str {:action :exec :body lua-code})))
+                            (let [resp (json/read-json (.readLine @pipe-rdr))]
+                              (if (= (:status resp) "OK")
+                                (println (:body resp))
+                                (println "ERROR : " (:body resp)))))))]
 
         ;; Wait for exec server to be ready
          (.start (Thread. (fn [] (while true (let [l (.readLine rdr)] (when l (println l)))))))
@@ -93,16 +93,7 @@
           (.flush (System/out))
           (let [env (new-env)
                 form (read)
-                special-fn? (contains? special-fns-set (first form))
-                res (when (not special-fn?) (eval-form env form))]
+                special-fn? (contains? special-fns-set (first form))]
             (if special-fn?
               (println (apply (special-fns (first form)) eval-form (rest form)))
-              (do
-                (when *repl-verbose*
-                  (println "---- LUA CODE ----")
-                  (println (:lua-code res)))
-                (let [resp (:response res)]
-                  (when resp
-                    (if (= (:status resp) "OK")
-                      (println (:body resp))
-                      (println "ERROR"))))))))))))0
+              (eval-form env form))))))))
