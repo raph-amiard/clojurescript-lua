@@ -7,12 +7,14 @@ actions = {
       local resp = {}
       local func, error = loadstring(body)
       if func then
-	 local result = func()
+	 local status, result = pcall(func)
          io.flush()
-	 if result then 
-	    resp.body = tostring(result)
+	 resp.body = tostring(result)
+	 if status then
+	    resp.status = "OK"
+	 else
+	    resp.status = "ERROR"
 	 end
-	 resp.status = "OK"
       else
 	 resp.status = "ERROR"
          resp.body = error

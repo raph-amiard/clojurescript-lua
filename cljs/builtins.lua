@@ -1,6 +1,8 @@
 builtins = {}
 basic_types_prot_functions = {}
 
+require("bit")
+
 function string:split(sep)
    local sep, fields = sep or ":", {}
    local pattern = string.format("([^%s]+)", sep)
@@ -29,4 +31,16 @@ end
 
 function builtins.array(...)
    return {...}
+end
+
+function builtins.type(x)
+   local t = type(x)
+   if t == "table" then
+      return x.constructor or "table"
+   else
+      return t
+   end
+end
+
+function builtins.getUid(x)
 end

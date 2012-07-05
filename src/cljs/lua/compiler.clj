@@ -23,7 +23,7 @@
   ([s] (munge s lua-reserved))
   ([s reserved]
     (let [ss (string/replace (str s) #"\/(.)" ".$1") ; Division is special
-          ss (apply str (map #(if (reserved %) (str % "$") %)
+          ss (apply str (map #(if (reserved %) (str % "__") %)
                              (string/split ss #"(?<=\.)|(?=\.)")))
           ms (clojure.lang.Compiler/munge ss)]
       (if (symbol? s)
@@ -283,7 +283,7 @@
   (let [checked (not (or unchecked (safe-test? test)))
         test-str (str (when checked "cljs.core.truth_") "(" (emit-str test) ")")]
     (if (in-expr? env)
-      (emits "(function () if " test-str " then return " then " else return " else " end)()")
+      (emits "(function () if " test-str " then return " then " else return " else " end end)()")
       (do
         (emitln "if " test-str " then")
         (emitln then " else ")
@@ -353,7 +353,7 @@
 (defn emit-fn-method
   [{:keys [gthis name variadic params statements ret env recurs max-fixed-arity]}]
   (emit-wrap env
-             (binding [*loop-var* (when recurs (gensym "loop_var"))]
+             (binding [*loop-var* (if recurs (gensym "loop_var_fnm") *loop-var*)]
                (emitln "(function (" (comma-sep (map munge params)) ")")
                (when gthis
                  (emitln "local " gthis " = " (munge (first params))))
@@ -376,7 +376,7 @@
          delegate-name (str mname "__delegate")]
      (emitln "(function () ")
      (emitln "local " delegate-name " = function (" (comma-sep params) ")")
-     (binding [*loop-var* (when recurs (gensym "loop_var"))]
+     (binding [*loop-var* (if recurs (gensym "loop_var_vfnm") *loop-var*)]
        (when recurs
          (emitln "local " *loop-var* " = true")
          (emitln "while " *loop-var* " do")
@@ -538,7 +538,7 @@
 (defmethod emit :let
   [{:keys [bindings statements ret env loop]}]
   (let [context (:context env)]
-    (binding [*loop-var* (when loop (gensym "loop_var"))]
+    (binding [*loop-var* (if loop (gensym "loop_var_l") *loop-var*)]
       (when (= :expr context) (emitln "(function ()"))
       (doseq [{:keys [name init]} bindings]
         (emitln "local " (munge name) " = " init))
@@ -574,7 +574,7 @@
     (when (= :expr context) (emitln "end)()"))))
 
 (defn protocol-prefix [psym]
-  (str (-> (str psym) (.replace \. \$) (.replace \/ \$)) "$"))
+  (str (-> (str psym) (.replaceAll "\\." "__") (.replaceAll "/" "__")) "__"))
 
 (defmethod emit :invoke
   [{:keys [f args env] :as expr}]
@@ -625,7 +625,7 @@
     (emit-wrap env
       (cond
        opt-not?
-       (emits "!(" (first args) ")")
+       (emits "not (" (first args) ")")
 
        proto?
        (let [pimpl (str (protocol-prefix protocol)

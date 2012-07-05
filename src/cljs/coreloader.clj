@@ -15,7 +15,7 @@
     (forms-seq (java.io.PushbackReader. (io/reader f)))))
 
 (defn keep-form? [form]
-  (contains? #{'ns 'def 'defn} (first form)))
+  (contains? #{'ns 'def 'defn 'deftype 'extend-type} (first form)))
 
 (defn signature [form]
   (if (= 'defn (first form))
@@ -27,16 +27,19 @@
 
 (defn core-forms-seq
   "Will load every form from core.cljs, except those who are defined in override-file
-   override-file can be anything that can be coerced to a reader by io/reader
-   Will subsequently load forms in extra-file, if provided"
-  ([override-file]
+   override-file can be anything that can be coerced to a reader by io/reader"
+  ([override-file & {:keys [replace-forms extra-file]}]
      (let [core-forms (make-forms-seq (io/resource "cljs/core.cljs")) 
-           override-map (-> override-file make-forms-seq make-override-map)]
-       (for [form core-forms]
-         (let [sig (signature form)]
-           (if (contains? override-map sig)
-             (override-map sig)
-             form)))))
-  ([override-file extra-file]
-     (lazy-cat (core-forms-seq override-file)
-               (make-forms-seq extra-file))))
+           override-map (-> override-file make-forms-seq make-override-map)
+           replace-forms (or replace-forms {})
+           forms-override (for [form core-forms]
+                            (let [sig (signature form)]
+                              (cond
+                               (contains? override-map sig) (override-map sig)
+                               (contains? replace-forms sig) (override-map (replace-forms sig))
+                                :else form)))
+           forms-filtered (remove nil? forms-override)]
+       (if extra-file
+         (lazy-cat forms-filtered
+                   (make-forms-seq extra-file))
+         forms-filtered))))

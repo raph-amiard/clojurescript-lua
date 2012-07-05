@@ -11,9 +11,14 @@
 (def ^:dynamic *repl-exec* true)
 (def next-core-form (atom 0))
 
+(def replace-forms {'(extend-type js/Date) nil
+                    '(extend-type array) '(extend-type table)})
+
+
 (def core-forms-seq
   (cloader/core-forms-seq (io/resource "core-lua.cljs")
-                          (io/resource "core-lua-extra.cljs")))
+                          :extra-file (io/resource "core-lua-extra.cljs")
+                          :replace-forms replace-forms))
 
 (defn new-env [] {:ns (@ana/namespaces ana/*cljs-ns*) :context :return :locals {}})
 
@@ -82,7 +87,7 @@
           (println (.getCanonicalPath pipe-out)))
 
         ;; Eval core.cljs forms
-        (eval-core-forms eval-form 65)
+        (eval-core-forms eval-form 89)
         
         ;; Eval common ns form
         (eval-form (new-env) '(ns cljs.user)) 
