@@ -15,7 +15,7 @@
   (= :expr (:context env)))
 
 (def lua-reserved
-  #{})
+  #{"not"})
 
 (def cljs-reserved-file-names #{"deps.cljs"})
 
@@ -116,7 +116,7 @@
                   \"))
 
 (defmethod emit-constant clojure.lang.Symbol [x]
-           (emits \" "\\uFDD1" \'
+           (emits \" "\\239\\183\\145" \'
                   (if (namespace x)
                     (str (namespace x) "/") "")
                   (name x)
@@ -160,9 +160,9 @@
 
 (defmethod emit-constant clojure.lang.PersistentHashSet [x]
   (emit-meta-constant x
-    (concat ["cljs.core.set(["]
+    (concat ["cljs.core.set({"]
             (comma-sep (map #(fn [] (emit-constant %)) x))
-            ["])"])))
+            ["})"])))
 
 (defn emit-block
   [context statements ret]
@@ -206,27 +206,27 @@
       (emits "cljs.core.ObjMap.EMPTY")
 
       (and simple-keys? (<= (count keys) obj-map-threshold))
-      (emits "cljs.core.ObjMap.fromObject(["
+      (emits "cljs.core.ObjMap.fromObject({"
              (comma-sep keys) ; keys
-             "],{"
+             "},{"
              (comma-sep (map (fn [k v]
                                (with-out-str (emit k) (print ":") (emit v)))
                              keys vals)) ; js obj
              "})")
 
       (<= (count keys) array-map-threshold)
-      (emits "cljs.core.PersistentArrayMap.fromArrays(["
+      (emits "cljs.core.PersistentArrayMap.fromArrays({"
              (comma-sep keys)
-             "],["
+             "},{"
              (comma-sep vals)
-             "])")
+             "})")
 
       :else
-      (emits "cljs.core.PersistentHashMap.fromArrays(["
+      (emits "cljs.core.PersistentHashMap.fromArrays({"
              (comma-sep keys)
-             "],["
+             "},{"
              (comma-sep vals)
-             "])"))))
+             "})"))))
 
 ;; TODO
 (defmethod emit :vector
@@ -234,16 +234,16 @@
   (emit-wrap env
     (if (empty? items)
       (emits "cljs.core.PersistentVector.EMPTY")
-      (emits "cljs.core.PersistentVector.fromArray(["
-             (comma-sep items) "], true)"))))
+      (emits "cljs.core.PersistentVector.fromArray({"
+             (comma-sep items) "}, true)"))))
 
 
 ;; TODO
 (defmethod emit :set
   [{:keys [items env]}]
   (emit-wrap env
-    (emits "cljs.core.set(["
-           (comma-sep items) "])")))
+    (emits "cljs.core.set({"
+           (comma-sep items) "})")))
 
 ;; TODO
 (defmethod emit :constant
