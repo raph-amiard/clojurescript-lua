@@ -28,7 +28,7 @@
 (defn core-forms-seq
   "Will load every form from core.cljs, except those who are defined in override-file
    override-file can be anything that can be coerced to a reader by io/reader"
-  ([override-file & {:keys [replace-forms extra-file]}]
+  ([override-file & {:keys [replace-forms extra-file-before extra-file-after]}]
      (let [core-forms (make-forms-seq (io/resource "cljs/core.cljs")) 
            override-map (-> override-file make-forms-seq make-override-map)
            replace-forms (or replace-forms {})
@@ -39,7 +39,6 @@
                                (contains? replace-forms sig) (override-map (replace-forms sig))
                                 :else form)))
            forms-filtered (remove nil? forms-override)]
-       (if extra-file
-         (lazy-cat forms-filtered
-                   (make-forms-seq extra-file))
-         forms-filtered))))
+       (lazy-cat (if extra-file-before (make-forms-seq extra-file-before) [])
+                 forms-filtered
+                 (if extra-file-after (make-forms-seq extra-file-after) [])))))

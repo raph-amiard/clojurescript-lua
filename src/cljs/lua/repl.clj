@@ -9,15 +9,15 @@
 (def lua-interp "lua")
 (def ^:dynamic *repl-verbose* true)
 (def ^:dynamic *repl-exec* true)
+(def ^:dynamic *error-fatal?* false)
 (def next-core-form (atom 0))
 
 (def replace-forms {'(extend-type js/Date) nil
                     '(extend-type array) '(extend-type table)})
 
-
 (def core-forms-seq
   (cloader/core-forms-seq (io/resource "core-lua.cljs")
-                          :extra-file (io/resource "core-lua-extra.cljs")
+                          :extra-file-before (io/resource "core-lua-init.cljs")
                           :replace-forms replace-forms))
 
 (defn new-env [] {:ns (@ana/namespaces ana/*cljs-ns*) :context :return :locals {}})
@@ -76,7 +76,11 @@
                             (let [resp (json/read-json (.readLine @pipe-rdr))]
                               (if (= (:status resp) "OK")
                                 (println (:body resp))
-                                (println "ERROR : " (:body resp)))))))]
+                                (do
+                                  (println "ERROR : " (:body resp))
+                                  (when *error-fatal?*
+                                    (println lua-code)
+                                    (.exit System))))))))]
 
         ;; Wait for exec server to be ready
          (.start (Thread. (fn [] (while true (let [l (.readLine rdr)] (when l (println l)))))))
@@ -87,8 +91,9 @@
           (println (.getCanonicalPath pipe-out)))
 
         ;; Eval core.cljs forms
-        (binding [*repl-verbose* false]
-          (eval-core-forms eval-form 150))
+        (binding [*repl-verbose* false
+                  *error-fatal?* true]
+          (eval-core-forms eval-form 168))
         
         ;; Eval common ns form
         (eval-form (new-env) '(ns cljs.user)) 
