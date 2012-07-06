@@ -2,9 +2,7 @@ builtins = {}
 basic_types_prot_functions = {}
 js = {}
 
-
 require("bit")
-require("md5")
 
 function string:split(sep)
    local sep, fields = sep or ":", {}
@@ -68,7 +66,7 @@ function string.hashCode(str)
 end
 
 js.Error = {}
-function js.Error.new(msg) =
+function js.Error.new(msg)
    local inst = {}
    inst.message = msg
    return inst
