@@ -1083,3 +1083,10 @@
            (~'f)
            ~(gen-apply-to-helper))))
      (set! ~'*unchecked-if* false)))
+
+(defmacro lua-string? [x]
+  `(identical? (lua/type ~x) "string"))
+
+(defmacro kw-or-sym? [x]
+  `(and (identical? (string/byte ~x 0) 239)
+        (identical? (string/byte ~x 1) 183)))

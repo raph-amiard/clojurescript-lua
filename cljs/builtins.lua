@@ -1,7 +1,10 @@
 builtins = {}
 basic_types_prot_functions = {}
+js = {}
+
 
 require("bit")
+require("md5")
 
 function string:split(sep)
    local sep, fields = sep or ":", {}
@@ -42,5 +45,31 @@ function builtins.type(x)
    end
 end
 
+function builtins.keys (obj) 
+   local keys = {}
+   for k,v in pairs(obj) do table.insert(k) end
+   return keys
+end
+
 function builtins.getUid(x)
+end
+
+string.HASHCODE_MAX_ = 0x100000000;
+
+-- Hashcode function borrowed from google closure library
+function string.hashCode(str)
+   local result = 0
+   for i=0,#str do
+    result = 31 * result + str:byte(i);
+    -- Normalize to 4 byte range, 0 ... 2^32.
+    result = result % string.HASHCODE_MAX_;
+   end
+   return result
+end
+
+js.Error = {}
+function js.Error.new(msg) =
+   local inst = {}
+   inst.message = msg
+   return inst
 end

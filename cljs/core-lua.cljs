@@ -157,3 +157,65 @@
          (-nth coll (.floor lua/Math n) not-found)
          (linear-traversal-nth coll (.floor lua/Math n) not-found))
        not-found)))
+
+
+(defn add-to-string-hash-cache [k]
+  (let [h (string/hashCode k)]
+    (aset string-hash-cache k h)
+    (set! string-hash-cache-count (inc string-hash-cache-count))
+    h))
+
+(defn hash
+  ([o] (hash o true))
+  ([o ^boolean check-cache]
+     (if (and ^boolean (identical? (lua/type o) "string") check-cache)
+       (check-string-hash-cache o)
+       (-hash o))))
+
+(defn lua-obj
+  ([]
+     (js* "{()}"))
+  ([& keyvals] (lua/error "Not implemented !")))
+
+
+(defn js-obj
+  ([]
+     (js* "({})"))
+  ([& keyvals] (lua/error "Not implemented !")))
+
+(def js-keys builtins/keys)
+
+(defn js-delete [obj key]
+    (js* "~{obj}[~{key}] = nil")
+    nil)
+
+(defn ^boolean string? [x]
+  (and ^boolean (lua-string? x)
+       (not (and (kw-or-sym? x)
+                 (or (identical? (string/byte x 2) 144)
+                     (identical? (string/byte x 2) 145))))))
+
+
+(defn ^boolean keyword? [x]
+  (and ^boolean
+       (lua-string? x)
+       (kw-or-sym? x)
+       (identical? (string/byte x 3) 144)))
+
+(defn ^boolean symbol? [x]
+  (and ^boolean
+       (lua-string? x)
+       (kw-or-sym? x)
+       (identical? (string/byte x 3) 145)))
+
+(defn ^boolean number? [n]
+  (identical? (lua/type n) "number"))
+
+(defn ^boolean fn? [f]
+  (identical? (lua/type f) "function"))
+
+(defn ^boolean integer?
+  "Returns true if n is an integer.  Warning: returns true on underflow condition."
+  [n]
+  (and (number? n)
+       (coercive-= n (math/floor n))))
