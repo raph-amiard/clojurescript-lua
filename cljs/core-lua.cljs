@@ -44,7 +44,9 @@
 
 (extend-type default
   IHash
-  (-hash [o] (lua/tonumber (string/sub (lua/tostring o) 10) 16)))
+  (-hash [o] (lua/tonumber (string/sub (lua/tostring o) 10) 16))
+  Object
+  (toString [o] (lua/tostring o)))
 
 (deftype IndexedSeq [a i]
   
@@ -112,6 +114,9 @@
        (IndexedSeq. prim i))))
 
 (extend-type table
+  Object
+  (toString [t] (builtins/array-to-string t))
+  
   ISeqable
   (-seq [table] (array-seq table 0))
 
@@ -255,3 +260,33 @@
   (let [a (to-array coll)]
     (builtins/shuffle a)
     (vec a)))
+
+(defn- str*
+  "Internal - do not use!"
+  ([] "")
+  ([x] (cond
+        (nil? x) ""
+        :else (toString x))
+  ([x & ys]
+     ((fn [sb more]
+        (if more
+          (recur (. sb  (append (str* (first more)))) (next more))
+          (str* sb)))
+      (gstring/StringBuffer. (str* x)) ys)))
+
+(defn str
+  "With no args, returns the empty string. With one arg x, returns
+  x.toString().  (str nil) returns the empty string. With more than
+  one arg, returns the concatenation of the str values of the args."
+  ([] "")
+  ([x] (cond
+        (symbol? x) (. x (substring 2 (.-length x)))
+        (keyword? x) (str* ":" (. x (substring 2 (.-length x))))
+        (nil? x) ""
+        :else (. x (toString))))
+  ([x & ys]
+     ((fn [sb more]
+        (if more
+          (recur (. sb  (append (str (first more)))) (next more))
+          (str* sb)))
+      (gstring/StringBuffer. (str x)) ys)))

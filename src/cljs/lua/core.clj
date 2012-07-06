@@ -194,13 +194,13 @@
 
 (defmacro max
   ([x] x)
-  ([x y] (list 'js* "((~{} > ~{}) ? ~{} : ~{})" x y x y))
-  ([x y & more] `(max (max ~x ~y) ~@more)))
+  ([x y] `(math/max ~x ~y))
+  ([x y & more] `(math/max ~x ~y ~@more)))
 
 (defmacro min
   ([x] x)
-  ([x y] (list 'js* "((~{} < ~{}) ? ~{} : ~{})" x y x y))
-  ([x y & more] `(min (min ~x ~y) ~@more)))
+  ([x y] `(math/min ~x ~y))
+  ([x y & more] `(math/min ~x ~y ~@more)))
 
 (defmacro mod [num div]
   (list 'js* "(~{} % ~{})" num div))
@@ -230,33 +230,33 @@
   ([x y & more] `(bit-and-not (bit-and-not ~x ~y) ~@more)))
 
 (defmacro bit-clear [x n]
-  (list 'js* "(~{} & ~(1 << ~{}))" x n))
+  (list 'js* "(bit.band(~{}, bit.bnot(bit.lshift(1, ~{}))))" x n))
 
 (defmacro bit-flip [x n]
-  (list 'js* "(~{} ^ (1 << ~{}))" x n))
+  (list 'js* "(bit.bxor(~{}, bit.lshift(1, ~{})))" x n))
 
 (defmacro bit-test [x n]
-  (list 'js* "((~{} & (1 << ~{})) ~= 0)" x n))
+  (list 'js* "(bit.band(~{}, bit.lshift(1, ~{})) ~= 0)" x n))
 
 (defmacro bit-shift-left [x n]
-  (list 'js* "(~{} << ~{})" x n))
+  (list 'js* "bit.lshift(~{}, ~{})" x n))
 
 (defmacro bit-shift-right [x n]
-  (list 'js* "(~{} >> ~{})" x n))
+  (list 'js* "bit.arshift(~{}, ~{})" x n))
 
 (defmacro bit-shift-right-zero-fill [x n]
-  (list 'js* "(~{} >>> ~{})" x n))
+  (list 'js* "bit.rshift(~{}, ~{})" x n))
 
 (defmacro bit-set [x n]
-  (list 'js* "(~{} | (1 << ~{}))" x n))
+  (list 'js* "bit.bor(~{}, bit.lshift(1, ~{}))" x n))
 
 ;; internal
 (defmacro mask [hash shift]
-  (list 'js* "((~{} >>> ~{}) & 0x01f)" hash shift))
+  (list 'js* "bit.band(bit.rshift(~{}, ~{}), 0x01f)" hash shift))
 
 ;; internal
 (defmacro bitpos [hash shift]
-  (list 'js* "(1 << ~{})" `(mask ~hash ~shift)))
+  (list 'js* "bit.lshift(1, ~{})" `(mask ~hash ~shift)))
 
 ;; internal
 (defmacro caching-hash [coll hash-fn hash-key]

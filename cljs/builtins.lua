@@ -99,4 +99,8 @@ function builtins.sort(t, comp)
    end
    return table.sort(t, fncomp)
 end
+
+function builtins.array_to_string(a)
+   return "<Array " .. table.concat(a, ", ") .. ">"
+end
    

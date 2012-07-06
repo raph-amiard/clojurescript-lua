@@ -93,7 +93,7 @@
         ;; Eval core.cljs forms
         (binding [*repl-verbose* false
                   *error-fatal?* true]
-          (eval-core-forms eval-form 168))
+          (eval-core-forms eval-form 205))
         
         ;; Eval common ns form
         (eval-form (new-env) '(ns cljs.user)) 
