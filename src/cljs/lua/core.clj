@@ -111,7 +111,9 @@
       `(~'js* ~(core/str "(~{}[~{}+1]" astr ")") ~a ~i ~@idxs))))
 
 (defmacro aset [a i v]
-  (list 'js* "~{}[~{}+1] = ~{}" a i v))
+  `(do
+     ~(list 'js* "~{}[~{}+1] = ~{}" a i v)
+     nil))
 
 (defmacro agetg
   ([a i]

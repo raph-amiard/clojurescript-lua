@@ -71,3 +71,32 @@ function js.Error.new(msg)
    inst.message = msg
    return inst
 end
+
+function builtins.compare(a, b)
+  if a > b then
+     return 1 
+  elseif a < b then
+     return -1
+  else 
+     return 0
+  end
+end
+
+function builtins.shuffle(arr, opt_randFn)
+  local randFn = opt_randFn or math.random
+  for i=#arr+1,1,-1 do
+    local j = Math.floor(randFn() * (i + 1));
+    local tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  end
+end
+
+function builtins.sort(t, comp)
+   local fncomp = nil
+   if comp then
+      fncomp = function(x, y) return comp(x, y) < 0 end
+   end
+   return table.sort(t, fncomp)
+end
+   

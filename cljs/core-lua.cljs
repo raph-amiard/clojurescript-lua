@@ -140,25 +140,6 @@
     ([table f start]
        (ci-reduce table f start))))
 
-
-(defn nth
-  "Returns the value at the index. get returns nil if index out of
-  bounds, nth throws an exception unless not-found is supplied.  nth
-  also works for strings, arrays, regex Matchers and Lists, and,
-  in O(n) time, for sequences."
-  ([coll n]
-     (when-not (nil? coll)
-       (if (satisfies? IIndexed coll)
-         (-nth coll (.floor lua/Math n))
-         (linear-traversal-nth coll (.floor lua/Math n)))))
-  ([coll n not-found]
-     (if-not (nil? coll)
-       (if (satisfies? IIndexed coll)
-         (-nth coll (.floor lua/Math n) not-found)
-         (linear-traversal-nth coll (.floor lua/Math n) not-found))
-       not-found)))
-
-
 (defn add-to-string-hash-cache [k]
   (let [h (string/hashCode k)]
     (aset string-hash-cache k h)
@@ -219,3 +200,58 @@
   [n]
   (and (number? n)
        (coercive-= n (math/floor n))))
+
+
+(defn nth
+  "Returns the value at the index. get returns nil if index out of
+  bounds, nth throws an exception unless not-found is supplied.  nth
+  also works for strings, arrays, regex Matchers and Lists, and,
+  in O(n) time, for sequences."
+  ([coll n]
+     (when-not (nil? coll)
+       (if (satisfies? IIndexed coll)
+         (-nth coll (math/floor n))
+         (linear-traversal-nth coll (math/floor n)))))
+  ([coll n not-found]
+     (if-not (nil? coll)
+       (if (satisfies? IIndexed coll)
+         (-nth coll (math/floor n) not-found)
+         (linear-traversal-nth coll (math/floor n) not-found))
+       not-found)))
+
+
+(defn compare
+  "Comparator. Returns a negative number, zero, or a positive number
+  when x is logically 'less than', 'equal to', or 'greater than'
+  y. Uses IComparable if available and google.array.defaultCompare for objects
+ of the same type and special-cases nil to be less than any other object."
+  [x y]
+  (cond
+   (identical? x y) 0
+   (nil? x) -1
+   (nil? y) 1
+   (identical? (type x) (type y)) (if (satisfies? IComparable x)
+                                    (-compare x y)
+                                    (builtins/compare x y))
+   :else (throw (js/Error. "compare on non-nil objects of different types"))))
+
+(defn sort
+  "Returns a sorted sequence of the items in coll. Comp can be
+   boolean-valued comparison funcion, or a -/0/+ valued comparator.
+   Comp defaults to compare."
+  ([coll]
+   (sort compare coll))
+  ([comp coll]
+   (if (seq coll)
+     (let [a (to-array coll)]
+       ;; matching Clojure's stable sort, though docs don't promise it
+       (builtins/sort a (fn->comparator comp))
+       (seq a))
+     ())))
+
+(defn shuffle
+  "Return a random permutation of coll"
+  [coll]
+  (let [a (to-array coll)]
+    (builtins/shuffle a)
+    (vec a)))
