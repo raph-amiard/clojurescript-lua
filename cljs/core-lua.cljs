@@ -266,13 +266,14 @@
   ([] "")
   ([x] (cond
         (nil? x) ""
-        :else (toString x))
+        :else (toString x)))
   ([x & ys]
      ((fn [sb more]
         (if more
-          (recur (. sb  (append (str* (first more)))) (next more))
+          (recur (append sb (str* (first more))) (next more))
           (str* sb)))
-      (gstring/StringBuffer. (str* x)) ys)))
+      (append (StringBuffer.) (str* x)) ys)))
+
 
 (defn str
   "With no args, returns the empty string. With one arg x, returns
@@ -280,13 +281,67 @@
   one arg, returns the concatenation of the str values of the args."
   ([] "")
   ([x] (cond
-        (symbol? x) (. x (substring 2 (.-length x)))
-        (keyword? x) (str* ":" (. x (substring 2 (.-length x))))
+        (symbol? x) (string/sub x 2)
+        (keyword? x) (str* ":" (string/sub x 2))
         (nil? x) ""
-        :else (. x (toString))))
+        :else (toString x)))
   ([x & ys]
      ((fn [sb more]
         (if more
-          (recur (. sb  (append (str (first more)))) (next more))
+          (recur (append sb (str (first more))) (next more))
           (str* sb)))
-      (gstring/StringBuffer. (str x)) ys)))
+      (append (StringBuffer.) (str x)) ys)))
+
+
+(defn subs
+  "Returns the substring of s beginning at start inclusive, and ending
+  at end (defaults to length of string), exclusive."
+  ([s start] (string/sub s start))
+  ([s start end] (string/sub s start end)))
+
+(defn symbol
+  "Returns a Symbol with the given namespace and name."
+  ([name] (cond (symbol? name) name
+                (keyword? name) (str* "\\239\\183\\144" "'" (subs name 2))
+                :else (str* "\\239\\183\\144" "'" name)))
+  ([ns name] (symbol (str* ns "/" name))))
+
+(defn keyword
+  "Returns a Keyword with the given namespace and name.  Do not use :
+  in the keyword strings, it will be added automatically."
+  ([name] (cond (keyword? name) name
+                (symbol? name) (str* "\\239\\183\\144" "'" (subs name 2))
+                :else (str* "\\239\\183\\144" "'" name)))
+  ([ns name] (keyword (str* ns "/" name))))
+
+(extend-type string
+  IHash
+  (-hash [o] (string/hashCode o))
+
+  ISeqable
+  (-seq [string] (prim-seq string 0))
+
+  ICounted
+  (-count [s] (alength s))
+
+  IIndexed
+  (-nth
+    ([string n]
+       (if (< n (-count string)) (string/sub string n (+ n 1))))
+    ([string n not-found]
+       (if (< n (-count string)) (string/sub string n (+ n 1))
+           not-found)))
+
+  ILookup
+  (-lookup
+    ([string k]
+       (-nth string k))
+    ([string k not_found]
+       (-nth string k not_found)))
+
+  IReduce
+  (-reduce
+    ([string f]
+       (ci-reduce string f))
+    ([string f start]
+       (ci-reduce string f start))))

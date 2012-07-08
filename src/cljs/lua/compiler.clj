@@ -15,7 +15,7 @@
   (= :expr (:context env)))
 
 (def lua-reserved
-  #{"not"})
+  #{"not" "end"})
 
 (def cljs-reserved-file-names #{"deps.cljs"})
 
