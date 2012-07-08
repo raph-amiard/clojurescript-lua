@@ -101,6 +101,9 @@ function builtins.sort(t, comp)
 end
 
 function builtins.array_to_string(a)
-   return "<Array " .. table.concat(a, ", ") .. ">"
+   local b = {}
+   for k,v in pairs(a) do
+      b[k] = cljs.core.toString(v)
+   end
+   return "<Array " .. table.concat(b, ", ") .. ">"
 end
-   

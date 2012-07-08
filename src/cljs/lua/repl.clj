@@ -104,7 +104,7 @@
           (.flush (System/out))
           (let [env (new-env)
                 form (read)
-                special-fn? (contains? special-fns-set (first form))]
+                special-fn? (and (seq? form) (contains? special-fns-set (first form)))]
             (if special-fn?
               (println (apply (special-fns (first form)) eval-form (rest form)))
               (eval-form env form))))))))
