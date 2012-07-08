@@ -10,6 +10,12 @@ for next in $DIR/../cljs $DIR/../lib/* $DIR/../src $DIR/../libclojurescript.jar;
     CLJSC_CP=$CLJSC_CP:$next
 done
 
-java -server -cp $CLJSC_CP clojure.main -e \
+if command -v rlwrap >/dev/null 2>&1; then
+    JCMD="rlwrap java"
+else
+    JCMD="java"
+fi
+
+$JCMD -server -cp $CLJSC_CP clojure.main -e \
 "(require '[cljs.lua.repl :as repl])
 (repl/-main)"
