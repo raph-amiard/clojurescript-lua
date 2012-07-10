@@ -71,7 +71,7 @@
   (let [strs (->> (repeat (count xs) "cljs.core.str(~{})")
                   (interpose ",")
                   (apply core/str))]
-   (concat (list 'js* (core/str "[" strs "].join('')")) xs)))
+   (concat (list 'js* (core/str "table.concat({" strs "})")) xs)))
 
 (defn bool-expr [e]
   (vary-meta e assoc :tag 'boolean))
@@ -407,34 +407,17 @@
                              (concat [`(asetg ~psym ~t true)]
                                      (when-not (skip-flag psym)
                                        [`(set! ~(prototype-prefix pprefix) true)])
-                                     (mapcat (fn [[f & meths :as form]]
-                                               (if (= psym 'cljs.core/IFn)
-                                                 (let [adapt-params (fn [[[targ & args :as sig] & body]]
-                                                                      (let [this-sym (with-meta (gensym "this-sym") {:tag t})]
-                                                                        `(~(vec (cons this-sym args))
-                                                                          (this-as ~this-sym
-                                                                                   (let [~targ ~this-sym]
-                                                                                     ~@body)))))
-                                                       meths (map adapt-params meths)
-                                                       this-sym (with-meta (gensym "this-sym") {:tag t})
-                                                       argsym (gensym "args")]
-                                                   [`(set! ~(prototype-prefix 'call) ~(with-meta `(fn ~@meths) (meta form)))
-                                                    `(set! ~(prototype-prefix 'apply)
-                                                           ~(with-meta
-                                                              `(fn ~[this-sym argsym]
-                                                                 (.apply (.-call ~this-sym) ~this-sym
-                                                                         (.concat (array ~this-sym) (aclone ~argsym))))
-                                                              (meta form)))])
-                                                 (let [pf (core/str pprefix f)
-                                                       adapt-params (fn [[[targ & args :as sig] & body]]
-                                                                      (cons (vec (cons (vary-meta targ assoc :tag t) args))
-                                                                            body))]
-                                                   (if (vector? (first meths))
-                                                     [`(set! ~(prototype-prefix (core/str pf "__arity__" (count (first meths)))) ~(with-meta `(fn ~@(adapt-params meths)) (meta form)))]
-                                                     (map (fn [[sig & body :as meth]]
-                                                            `(set! ~(prototype-prefix (core/str pf "__arity__" (count sig)))
-                                                                   ~(with-meta `(fn ~(adapt-params meth)) (meta form))))
-                                                          meths)))))
+                                     (mapcat (fn [[f & meths :as form]]                                               
+                                               (let [pf (core/str pprefix f)
+                                                     adapt-params (fn [[[targ & args :as sig] & body]]
+                                                                    (cons (vec (cons (vary-meta targ assoc :tag t) args))
+                                                                          body))]
+                                                 (if (vector? (first meths))
+                                                   [`(set! ~(prototype-prefix (core/str pf "__arity__" (count (first meths)))) ~(with-meta `(fn ~@(adapt-params meths)) (meta form)))]
+                                                   (map (fn [[sig & body :as meth]]
+                                                          `(set! ~(prototype-prefix (core/str pf "__arity__" (count sig)))
+                                                                 ~(with-meta `(fn ~(adapt-params meth)) (meta form))))
+                                                        meths))))
                                              sigs))))]
         `(do ~@(mapcat assign-impls impl-map))))))
 
@@ -921,7 +904,7 @@
     rest)))
 
 (defmacro js-obj [& rest]
-  (let [kvs-str (->> (repeat "~{}:~{}")
+  (let [kvs-str (->> (repeat "[~{}]=~{}")
                      (take (quot (count rest) 2))
                      (interpose ",")
                      (apply core/str))]
@@ -933,7 +916,7 @@
   (list 'js* "#(~{})" a))
 
 (defmacro aclone [a]
-  (list 'js* "~{}.slice()" a))
+  (list 'js* "builtins.array_copy(~{})" a))
 
 (defmacro amap
   "Maps an expression across an array a, using an index named idx, and
@@ -1090,5 +1073,5 @@
   `(identical? (lua/type ~x) "string"))
 
 (defmacro kw-or-sym? [x]
-  `(and (identical? (string/byte ~x 0) 239)
-        (identical? (string/byte ~x 1) 183)))
+  `(and (identical? (string/byte ~x 1) 239)
+        (identical? (string/byte ~x 2) 183)))

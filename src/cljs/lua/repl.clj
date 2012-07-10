@@ -12,8 +12,10 @@
 (def ^:dynamic *error-fatal?* false)
 (def next-core-form (atom 0))
 
-(def replace-forms {'(extend-type js/Date) nil
-                    '(extend-type array) '(extend-type table)})
+(def replace-forms {'(extend-type js/Date) nil                   
+                    '(extend-type array) '(extend-type table)
+                    '(set! js/String.prototype.apply) nil
+                    '(extend-type js/String) nil })
 
 (def core-forms-seq
   (cloader/core-forms-seq (io/resource "core-lua.cljs")
@@ -23,10 +25,13 @@
 (defn new-env [] {:ns (@ana/namespaces ana/*cljs-ns*) :context :return :locals {}})
 
 (defn eval-core-forms [eval-fn n]
-  (doseq [form (take n (drop @next-core-form core-forms-seq))]
-    (println "eval form " (take 2 form) "...")
-    (eval-fn (new-env) form))
-    (swap! next-core-form + n))
+  (let [current-ns ana/*cljs-ns*]
+    (binding [*repl-verbose* false] (eval-fn (new-env) '(ns cljs.core)))
+    (doseq [form (take n (drop @next-core-form core-forms-seq))]
+      (println "eval form " (take 2 form) "...")
+      (eval-fn (new-env) form))
+    (binding [*repl-verbose* false] (eval-fn (new-env) (list 'ns current-ns)))
+    (swap! next-core-form + n)))
 
 (def special-fns
   {'switch-verbose (fn [_] (set! *repl-verbose* (not *repl-verbose*)))
@@ -93,7 +98,7 @@
         ;; Eval core.cljs forms
         (binding [*repl-verbose* false
                   *error-fatal?* true]
-          (eval-core-forms eval-form 223))
+          (eval-core-forms eval-form 350))
         
         ;; Eval common ns form
         (eval-form (new-env) '(ns cljs.user)) 

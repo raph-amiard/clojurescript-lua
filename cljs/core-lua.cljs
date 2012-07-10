@@ -178,8 +178,8 @@
 (defn ^boolean string? [x]
   (and ^boolean (lua-string? x)
        (not (and (kw-or-sym? x)
-                 (or (identical? (string/byte x 2) 144)
-                     (identical? (string/byte x 2) 145))))))
+                 (or (identical? (string/byte x 3) 144)
+                     (identical? (string/byte x 3) 145))))))
 
 
 (defn ^boolean keyword? [x]
@@ -281,8 +281,8 @@
   one arg, returns the concatenation of the str values of the args."
   ([] "")
   ([x] (cond
-        (symbol? x) (string/sub x 2)
-        (keyword? x) (str* ":" (string/sub x 2))
+        (symbol? x) (string/sub x 5)
+        (keyword? x) (str* ":" (string/sub x 5))
         (nil? x) ""
         :else (toString x)))
   ([x & ys]
@@ -296,8 +296,8 @@
 (defn subs
   "Returns the substring of s beginning at start inclusive, and ending
   at end (defaults to length of string), exclusive."
-  ([s start] (string/sub s start))
-  ([s start end] (string/sub s start end)))
+  ([s start] (string/sub s (inc start)))
+  ([s start end] (string/sub s (inc start) end)))
 
 (defn symbol
   "Returns a Symbol with the given namespace and name."
@@ -321,15 +321,24 @@
   ISeqable
   (-seq [string] (prim-seq string 0))
 
+  ASeq
+  ISeq
+  (-first [s] (string/sub s 1 1))
+  (-rest [s] (string/sub s 2))
+
+  INext
+  (-next [s] (let [a (string/sub s 2)]
+               (if (identical? a "") nil a)))
+
   ICounted
   (-count [s] (alength s))
 
   IIndexed
   (-nth
     ([string n]
-       (if (< n (-count string)) (string/sub string n (+ n 1))))
+       (if (< n (-count string)) (string/sub string (+ n  1) (+ n 1))))
     ([string n not-found]
-       (if (< n (-count string)) (string/sub string n (+ n 1))
+       (if (< n (-count string)) (string/sub string (+ n 1) (+ n 1))
            not-found)))
 
   ILookup
@@ -344,4 +353,403 @@
     ([string f]
        (ci-reduce string f))
     ([string f start]
-       (ci-reduce string f start))))
+       (ci-reduce string f start)))
+
+  IFn
+  (-invoke
+    ([this coll]
+       (get coll (toString this)))
+    ([this coll not-found]
+       (get coll (toString this) not-found))))
+
+(defn to-array
+  "Naive impl of to-array as a start."
+  [s]
+  (let [ary (array)]
+    (loop [s s]
+      (if (seq s)
+        (do (table/insert ary (first s))
+            (recur (next s)))
+        ary))))
+
+(defn apply
+  "Applies fn f to the argument list formed by prepending intervening arguments to args.
+  First cut.  Not lazy.  Needs to use emitted toApply."
+  ([f args]
+     (f (lua/unpack (to-array args))))
+  ([f x args]
+     (f x (lua/unpack (to-array args))))
+  ([f x y args]
+     (f x y (lua/unpack (to-array args))))
+  ([f x y z args]
+     (f x y z (lua/unpack (to-array args))))
+  ([f a b c d & args]
+     (let [arglist (cons a (cons b (cons c (cons d (spread args)))))]
+       (f x y z (lua/unpack (to-array arglist))))))
+
+
+;;; Vector
+;;; DEPRECATED
+;;; in favor of PersistentVector
+(deftype Vector [meta array ^:mutable __hash]
+  Object
+  (toString [this]
+    (pr-str this))
+
+  IWithMeta
+  (-with-meta [coll meta] (Vector. meta array __hash))
+
+  IMeta
+  (-meta [coll] meta)
+
+  IStack
+  (-peek [coll]
+    (let [count (alength array)]
+      (when (> count 0)
+        (aget array (dec count)))))
+  (-pop [coll]
+    (if (> (alength array) 0)
+      (let [new-array (aclone array)]
+        (. new-array (pop))
+        (Vector. meta new-array nil))
+      (throw (js/Error. "Can't pop empty vector"))))
+
+  ICollection
+  (-conj [coll o]
+    (let [new-array (aclone array)]
+      (.push new-array o)
+      (Vector. meta new-array nil)))
+
+  IEmptyableCollection
+  (-empty [coll] (with-meta cljs.core.Vector/EMPTY meta))
+
+  ISequential
+  IEquiv
+  (-equiv [coll other] (equiv-sequential coll other))
+
+  IHash
+  (-hash [coll] (caching-hash coll hash-coll __hash))
+
+  ISeqable
+  (-seq [coll]
+    (when (> (alength array) 0)
+      (let [vector-seq
+             (fn vector-seq [i]
+               (lazy-seq
+                 (when (< i (alength array))
+                   (cons (aget array i) (vector-seq (inc i))))))]
+        (vector-seq 0))))
+
+  ICounted
+  (-count [coll] (alength array))
+
+  IIndexed
+  (-nth [coll n]
+    (if (and (<= 0 n) (< n (alength array)))
+      (aget array n)
+      #_(throw (js/Error. (str "No item " n " in vector of length " (alength array))))))
+  (-nth [coll n not-found]
+    (if (and (<= 0 n) (< n (alength array)))
+      (aget array n)
+      not-found))
+
+  ILookup
+  (-lookup [coll k] (-nth coll k nil))
+  (-lookup [coll k not-found] (-nth coll k not-found))
+
+  IAssociative
+  (-assoc [coll k v]
+    (let [new-array (aclone array)]
+      (aset new-array k v)
+      (Vector. meta new-array nil)))
+
+  IVector
+  (-assoc-n [coll n val] (-assoc coll n val))
+
+  IReduce
+  (-reduce [v f]
+    (ci-reduce array f))
+  (-reduce [v f start]
+    (ci-reduce array f start))
+
+  IFn
+  (-invoke [coll k]
+    (-lookup coll k))
+  (-invoke [coll k not-found]
+    (-lookup coll k not-found)))
+
+
+(deftype PersistentVector [meta cnt shift root tail ^:mutable __hash]
+  Object
+  (toString [this]
+    (pr-str this))
+
+  IWithMeta
+  (-with-meta [coll meta] (PersistentVector. meta cnt shift root tail __hash))
+
+  IMeta
+  (-meta [coll] meta)
+
+  IStack
+  (-peek [coll]
+    (when (> cnt 0)
+      (-nth coll (dec cnt))))
+  (-pop [coll]
+    (cond
+     (zero? cnt) (throw (js/Error. "Can't pop empty vector"))
+     (== 1 cnt) (-with-meta cljs.core.PersistentVector/EMPTY meta)
+     (< 1 (- cnt (tail-off coll)))
+      (PersistentVector. meta (dec cnt) shift root (table/slice tail 1 -2) nil)
+      :else (let [new-tail (array-for coll (- cnt 2))
+                  nr (pop-tail coll shift root)
+                  new-root (if (nil? nr) cljs.core.PersistentVector/EMPTY_NODE nr)
+                  cnt-1 (dec cnt)]
+              (if (and (< 5 shift) (nil? (pv-aget new-root 1)))
+                (PersistentVector. meta cnt-1 (- shift 5) (pv-aget new-root 0) new-tail nil)
+                (PersistentVector. meta cnt-1 shift new-root new-tail nil)))))
+
+  ICollection
+  (-conj [coll o]
+    (if (< (- cnt (tail-off coll)) 32)
+      (let [new-tail (aclone tail)]
+        (table/insert new-tail o)
+        (PersistentVector. meta (inc cnt) shift root new-tail nil))
+      (let [root-overflow? (> (bit-shift-right-zero-fill cnt 5) (bit-shift-left 1 shift))
+            new-shift (if root-overflow? (+ shift 5) shift)
+            new-root (if root-overflow?
+                       (let [n-r (pv-fresh-node nil)]
+                           (pv-aset n-r 0 root)
+                           (pv-aset n-r 1 (new-path nil shift (VectorNode. nil tail)))
+                           n-r)
+                       (push-tail coll shift root (VectorNode. nil tail)))]
+        (PersistentVector. meta (inc cnt) new-shift new-root (array o) nil))))
+
+  IEmptyableCollection
+  (-empty [coll] (with-meta cljs.core.PersistentVector/EMPTY meta))
+
+  ISequential
+  IEquiv
+  (-equiv [coll other] (equiv-sequential coll other))
+
+  IHash
+  (-hash [coll] (caching-hash coll hash-coll __hash))
+
+  ISeqable
+  (-seq [coll]
+    (if (zero? cnt)
+      nil
+      (chunked-seq coll 0 0)))
+
+  ICounted
+  (-count [coll] cnt)
+
+  IIndexed
+  (-nth [coll n]
+    (aget (array-for coll n) (bit-and n 0x01f)))
+  (-nth [coll n not-found]
+    (if (and (<= 0 n) (< n cnt))
+      (-nth coll n)
+      not-found))
+
+  ILookup
+  (-lookup [coll k] (-nth coll k nil))
+  (-lookup [coll k not-found] (-nth coll k not-found))
+
+  IMapEntry
+  (-key [coll]
+    (-nth coll 0))
+  (-val [coll]
+    (-nth coll 1))
+
+  IAssociative
+  (-assoc [coll k v]
+    (cond
+       (and (<= 0 k) (< k cnt))
+       (if (<= (tail-off coll) k)
+         (let [new-tail (aclone tail)]
+           (aset new-tail (bit-and k 0x01f) v)
+           (PersistentVector. meta cnt shift root new-tail nil))
+         (PersistentVector. meta cnt shift (do-assoc coll shift root k v) tail nil))
+       (== k cnt) (-conj coll v)
+       :else (throw (js/Error. (str "Index " k " out of bounds  [0," cnt "]")))))
+
+  IVector
+  (-assoc-n [coll n val] (-assoc coll n val))
+
+  IReduce
+  (-reduce [v f]
+    (ci-reduce v f))
+  (-reduce [v f start]
+    (ci-reduce v f start))
+
+  IKVReduce
+  (-kv-reduce [v f init]
+    (let [step-init (array 0 init)] ; [step 0 init init]
+      (loop [i 0]
+        (if (< i cnt)
+          (let [arr (array-for v i)
+                len (alength arr)]
+            (let [init (loop [j 0 init (aget step-init 1)]
+                         (if (< j len)
+                           (let [init (f init (+ j i) (aget arr j))]
+                             (if (reduced? init)
+                               init
+                               (recur (inc j) init)))
+                           (do (aset step-init 0 len)
+                               (aset step-init 1 init)
+                               init)))]
+              (if (reduced? init)
+                @init
+                (recur (+ i (aget step-init 0))))))
+          (aget step-init 1)))))
+
+  IFn
+  (-invoke [coll k]
+    (-lookup coll k))
+  (-invoke [coll k not-found]
+    (-lookup coll k not-found))
+
+  IEditableCollection
+  (-as-transient [coll]
+    (TransientVector. cnt shift (tv-editable-root root) (tv-editable-tail tail)))
+
+  IReversible
+  (-rseq [coll]
+    (if (pos? cnt)
+      (RSeq. coll (dec cnt) nil)
+      ())))
+
+(set! cljs.core.PersistentVector/fromArray
+      (fn [xs no-clone]
+        (let [l (alength xs)
+              xs (if (identical? no-clone true) xs (aclone xs))]
+          (if (< l 32)
+            (PersistentVector. nil l 5 cljs.core.PersistentVector/EMPTY_NODE xs nil)
+            (let [node (table/slice xs 1 32)
+                  v (PersistentVector. nil 32 5 cljs.core.PersistentVector/EMPTY_NODE node nil)]
+             (loop [i 32 out (-as-transient v)]
+               (if (< i l)
+                 (recur (inc i) (conj! out (aget xs i)))
+                 (persistent! out))))))))
+
+(defn- tv-editable-tail [tl]
+  (let [ret (make-array 32)]
+    (array-copy tl 0 ret 0 (alength tl))
+    ret))
+
+(deftype ChunkBuffer [^:mutable buf ^:mutable len]
+  ICounted
+  (-count [_] len))
+
+
+(defn chunk-append [cb o]
+  (aset (.-buf cb) (.-len cb) o)
+  (set! (.-len cb) (inc (.-len cb))))
+
+(defn chunk [cb]
+  (let [ret (ArrayChunk. (.-buf cb) 0 (.-len cb))]
+    (set! (.-buf cb) nil)
+    ret))
+
+
+(defn- obj-map->hash-map [m k v]
+  (let [ks  (.-keys m)
+        len (alength ks)
+        so  (.-strobj m)
+        out (with-meta cljs.core.PersistentHashMap/EMPTY (meta m))]
+    (loop [i   0
+           out (transient out)]
+      (if (< i len)
+        (let [k (aget ks i)]
+          (recur (inc i) (assoc! out k (aget so k))))
+        (persistent! (assoc! out k v))))))
+
+
+(deftype ObjMap [meta keys strobj update-count ^:mutable __hash]
+  Object
+  (toString [this]
+    (pr-str this))
+  
+  IWithMeta
+  (-with-meta [coll meta] (ObjMap. meta keys strobj update-count __hash))
+
+  IMeta
+  (-meta [coll] meta)
+
+  ICollection
+  (-conj [coll entry]
+    (if (vector? entry)
+      (-assoc coll (-nth entry 0) (-nth entry 1))
+      (reduce -conj
+              coll
+              entry)))
+
+  IEmptyableCollection
+  (-empty [coll] (with-meta cljs.core.ObjMap/EMPTY meta))
+
+  IEquiv
+  (-equiv [coll other] (equiv-map coll other))
+
+  IHash
+  (-hash [coll] (caching-hash coll hash-imap __hash))
+
+  ISeqable
+  (-seq [coll]
+    (when (pos? (.-length keys))
+      (map #(vector % (aget strobj %))
+           (.sort keys obj-map-compare-keys))))
+
+  ICounted
+  (-count [coll] (.-length keys))
+
+  ILookup
+  (-lookup [coll k] (-lookup coll k nil))
+  (-lookup [coll k not-found]
+    (if (and ^boolean (goog/isString k)
+             (not (nil? (scan-array 1 k keys))))
+      (aget strobj k)
+      not-found))
+
+  IAssociative
+  (-assoc [coll k v]
+    (if ^boolean (goog/isString k)
+        (if (or (> update-count cljs.core.ObjMap/HASHMAP_THRESHOLD)
+                (>= (alength keys) cljs.core.ObjMap/HASHMAP_THRESHOLD))
+          (obj-map->hash-map coll k v)
+          (if-not (nil? (scan-array 1 k keys))
+            (let [new-strobj (obj-clone strobj keys)]
+              (aset new-strobj k v)
+              (ObjMap. meta keys new-strobj (inc update-count) nil)) ; overwrite
+            (let [new-strobj (obj-clone strobj keys) ; append
+                  new-keys (aclone keys)]
+              (aset new-strobj k v)
+              (.push new-keys k)
+              (ObjMap. meta new-keys new-strobj (inc update-count) nil))))
+        ;; non-string key. game over.
+        (obj-map->hash-map coll k v)))
+  (-contains-key? [coll k]
+    (if (and ^boolean (goog/isString k)
+             (not (nil? (scan-array 1 k keys))))
+      true
+      false))
+
+  IMap
+  (-dissoc [coll k]
+    (if (and ^boolean (goog/isString k)
+             (not (nil? (scan-array 1 k keys))))
+      (let [new-keys (aclone keys)
+            new-strobj (obj-clone strobj keys)]
+        (.splice new-keys (scan-array 1 k new-keys) 1)
+        (js-delete new-strobj k)
+        (ObjMap. meta new-keys new-strobj (inc update-count) nil))
+      coll)) ; key not found, return coll unchanged
+
+  IFn
+  (-invoke [coll k]
+    (-lookup coll k))
+  (-invoke [coll k not-found]
+    (-lookup coll k not-found))
+
+  IEditableCollection
+  (-as-transient [coll]
+    (transient (into (hash-map) coll))))

@@ -23,7 +23,7 @@
     (take 2 form)))
 
 (defn make-override-map [forms-seq]
-  (apply hash-map (mapcat #(if (keep-form? %) [(signature %) %] []) forms-seq)))
+  (apply hash-map (mapcat (fn [a] [(signature a) a]) forms-seq)))
 
 (defn core-forms-seq
   "Will load every form from core.cljs, except those who are defined in override-file

@@ -10,12 +10,18 @@
 (def ^:dynamic *finalizer* nil)
 (def ^:dynamic *loop-var* nil)
 (def ^:dynamic *emit-comments* false)
+(def ^:dynamic *def-name* nil)
+(def ^:dynamic *def-symbol* nil)
+
+
 
 (defn in-expr? [env]
   (= :expr (:context env)))
 
 (def lua-reserved
-  #{"not" "end"})
+  #{"and" "break" "do" "else" "elseif" "end" "for"
+    "function" "if" "local" "nil" "not" "or" "repeat" "return" "then"
+    "until" "while"})
 
 (def cljs-reserved-file-names #{"deps.cljs"})
 
@@ -186,8 +192,9 @@
   (let [n (:name info)
         n (if (= (namespace n) "lua")
             (name n)
-            n)]
-  (emit-wrap env (emits (munge n)))))
+            n)
+        n (if (and *def-name* (= *def-name* (str n))) *def-symbol* n)]
+    (emit-wrap env (emits (munge n)))))
 
 (defmethod emit :meta
   [{:keys [expr meta env]}]
@@ -210,7 +217,7 @@
              (comma-sep keys) ; keys
              "},{"
              (comma-sep (map (fn [k v]
-                               (with-out-str (emit k) (print ":") (emit v)))
+                               (with-out-str  (emits "[" k "]=" v)))
                              keys vals)) ; js obj
              "})")
 
@@ -316,12 +323,14 @@
 
 (defmethod emit :def
   [{:keys [name init env doc export]}]
-  (when init
-    (let [mname (munge name)]
-      (emit-comment doc (:jsdoc init))
-      (when (in-expr? env) (emits "function () "))
-      (emitln mname " = " init)
-      (when (in-expr? env) (emits "; return " mname)))))
+  (binding [*def-name* (clojure.core/name name)
+            *def-symbol* name]
+    (when init
+      (let [mname (munge name)]
+        (emit-comment doc (:jsdoc init))
+        (when (in-expr? env) (emits "function () "))
+        (emitln mname " = " init)
+        (when (in-expr? env) (emits "; return " mname))))))
 
 (defn emit-apply-to
   [{:keys [name params env]}]
@@ -630,7 +639,7 @@
        proto?
        (let [pimpl (str (protocol-prefix protocol)
                         (munge (name (:name info))) "__arity__" (count args))]
-         (emits (first args) "." pimpl "(" (comma-sep args) ")"))
+         (emits (first args) ".proto_methods." pimpl "(" (comma-sep args) ")"))
 
        keyword?
        (emits "(new cljs.core.Keyword(" f "))(" (comma-sep args) ")")
