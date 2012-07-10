@@ -2,6 +2,8 @@ builtins = {}
 basic_types_prot_functions = {}
 js = {}
 
+debug.setmetatable(0, {})
+
 require("bit")
 
 function string:split(sep)
@@ -144,6 +146,5 @@ end
 function builtins.IFnCall(obj, ...)
    local len = select("#", ...) + 1
    local fn_name = "cljs__core__IFn___invoke__arity__" .. tostring(len)
-   print(fn_name)
    return obj.proto_methods[fn_name](obj, ...)
 end

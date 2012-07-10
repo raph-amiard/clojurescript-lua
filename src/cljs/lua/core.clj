@@ -391,12 +391,19 @@
             assign-impls (fn [[p sigs]]
                            (warn-if-not-protocol p)
                            (let [psym (resolve p)
-                                 pfn-prefix (subs (core/str psym) 0 (clojure.core/inc (.indexOf (core/str psym) "/")))]
-                             (cons `(asetg ~psym ~t true)
-                                   (map (fn [[f & meths :as form]]
-                                          `(asetg ~(basic-type-method f)  ~t ~(with-meta `(fn ~@meths) (meta form))))
-                                        sigs))))]
-        `(do ~@(mapcat assign-impls impl-map) nil))
+                                 pfn-prefix (subs (core/str psym) 0 (clojure.core/inc (.indexOf (core/str psym) "/")))
+                                 res (cons `(asetg ~psym ~t true)
+                                           (mapcat
+                                            (fn [[f & meths :as form]]
+                                              (if (= psym 'cljs.core/IFn)
+                                                [`(asetg ~(basic-type-method f) ~t ~(with-meta `(fn ~@meths) (meta form)))
+                                                 `(set! (.-__call (lua/getmetatable ~({'string "" 'number 0} tsym)))
+                                                        (agetg ~(basic-type-method f) ~t))]
+                                                [`(asetg ~(basic-type-method f) ~t ~(with-meta `(fn ~@meths) (meta form)))]))
+                                                sigs))]
+                               res))]
+        `(do ~@(mapcat assign-impls impl-map)
+             nil))
       (let [t (resolve tsym)
             prototype-prefix (fn [sym]
                                `(.. ~tsym -proto_methods ~(to-property sym)))
