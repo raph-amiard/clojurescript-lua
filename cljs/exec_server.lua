@@ -11,8 +11,8 @@ actions = {
          io.flush()
 	 resp.body = tostring(result)
 	 if status then
-            if result and cljs and cljs.core and cljs.core.toString then
-               resp.body = cljs.core.toString(result)
+            if result and cljs and cljs.core and cljs.core.str then
+               resp.body = cljs.core.str(result)
             end
 	    resp.status = "OK"
 	 else
