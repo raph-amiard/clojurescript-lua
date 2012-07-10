@@ -97,7 +97,7 @@ string.HASHCODE_MAX_ = 0x100000000;
 -- Hashcode function borrowed from google closure library
 function string.hashCode(str)
    local result = 0
-   for i=0,#str do
+   for i=1,#str do
     result = 31 * result + str:byte(i);
     -- Normalize to 4 byte range, 0 ... 2^32.
     result = result % string.HASHCODE_MAX_;
