@@ -695,6 +695,7 @@
     (emitln "instance.constructor = " (munge t))
     (doseq [fld fields]
       (emitln "instance." fld " = " fld))
+    (emitln "setmetatable(instance, {__call=builtins.IFnCall})")
     (comment (doseq [[pno pmask] pmasks]
                (emitln "instance.cljs__lang__protocol_mask__partition" pno "__ = " pmask)))
     (emitln "return instance")

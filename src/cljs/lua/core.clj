@@ -413,7 +413,8 @@
                                                                     (cons (vec (cons (vary-meta targ assoc :tag t) args))
                                                                           body))]
                                                  (if (vector? (first meths))
-                                                   [`(set! ~(prototype-prefix (core/str pf "__arity__" (count (first meths)))) ~(with-meta `(fn ~@(adapt-params meths)) (meta form)))]
+                                                   [`(set! ~(prototype-prefix (core/str pf "__arity__" (count (first meths))))
+                                                           ~(with-meta `(fn ~@(adapt-params meths)) (meta form)))]
                                                    (map (fn [[sig & body :as meth]]
                                                           `(set! ~(prototype-prefix (core/str pf "__arity__" (count sig)))
                                                                  ~(with-meta `(fn ~(adapt-params meth)) (meta form))))
