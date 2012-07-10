@@ -335,30 +335,35 @@
 
   IIndexed
   (-nth
-    ([string n]
-       (if (< n (-count string)) (string/sub string (+ n  1) (+ n 1))))
-    ([string n not-found]
-       (if (< n (-count string)) (string/sub string (+ n 1) (+ n 1))
-           not-found)))
+    [string n]
+    (if (< n (-count string)) (string/sub string (+ n  1) (+ n 1))))
+  (-nth
+    [string n not-found]
+    (if (< n (-count string)) (string/sub string (+ n 1) (+ n 1))
+        not-found))
 
   ILookup
   (-lookup
-    ([string k]
-       (-nth string k))
-    ([string k not_found]
-       (-nth string k not_found)))
+    [string k]
+    (-nth string k))
+  (-lookup
+    [string k not_found]
+    (-nth string k not_found))
 
   IReduce
   (-reduce
-    ([string f]
-       (ci-reduce string f))
-    ([string f start]
-       (ci-reduce string f start)))
+    [string f]
+    (ci-reduce string f))
+  (-reduce
+    [string f start]
+    (ci-reduce string f start))
 
   IFn
   (-invoke
     ([this coll]
-       (get coll (toString this)))
+       (get coll (toString this))))
+  
+  (-invoke
     ([this coll not-found]
        (get coll (toString this) not-found))))
 
@@ -660,8 +665,8 @@
     (loop [i   0
            out (transient out)]
       (if (< i len)
-        (let [k (aget ks i)]
-          (recur (inc i) (assoc! out k (aget so k))))
+        (let [k (agetg ks i)]
+          (recur (inc i) (assoc! out k (agetg so k))))
         (persistent! (assoc! out k v))))))
 
 
@@ -695,8 +700,8 @@
 
   ISeqable
   (-seq [coll]
-    (when (pos? (.-length keys))
-      (map #(vector % (aget strobj %))
+    (when (pos? (alength keys))
+      (map #(vector % (agetg strobj %))
            (.sort keys obj-map-compare-keys))))
 
   ICounted
@@ -705,14 +710,14 @@
   ILookup
   (-lookup [coll k] (-lookup coll k nil))
   (-lookup [coll k not-found]
-    (if (and ^boolean (goog/isString k)
+    (if (and ^boolean (lua-string? k)
              (not (nil? (scan-array 1 k keys))))
-      (aget strobj k)
+      (agetg strobj k)
       not-found))
 
   IAssociative
   (-assoc [coll k v]
-    (if ^boolean (goog/isString k)
+    (if ^boolean (lua-string? k)
         (if (or (> update-count cljs.core.ObjMap/HASHMAP_THRESHOLD)
                 (>= (alength keys) cljs.core.ObjMap/HASHMAP_THRESHOLD))
           (obj-map->hash-map coll k v)
@@ -723,19 +728,19 @@
             (let [new-strobj (obj-clone strobj keys) ; append
                   new-keys (aclone keys)]
               (aset new-strobj k v)
-              (.push new-keys k)
+              (table/insert new-keys k)
               (ObjMap. meta new-keys new-strobj (inc update-count) nil))))
         ;; non-string key. game over.
         (obj-map->hash-map coll k v)))
   (-contains-key? [coll k]
-    (if (and ^boolean (goog/isString k)
+    (if (and ^boolean (lua-string? k)
              (not (nil? (scan-array 1 k keys))))
       true
       false))
 
   IMap
   (-dissoc [coll k]
-    (if (and ^boolean (goog/isString k)
+    (if (and ^boolean (lua-string? k)
              (not (nil? (scan-array 1 k keys))))
       (let [new-keys (aclone keys)
             new-strobj (obj-clone strobj keys)]

@@ -642,7 +642,7 @@
          (emits (first args) ".proto_methods." pimpl "(" (comma-sep args) ")"))
 
        keyword?
-       (emits "(new cljs.core.Keyword(" f "))(" (comma-sep args) ")")
+       (emits "(" f ")(" (comma-sep args) ")")
        
        variadic-invoke
        (let [mfa (:max-fixed-arity variadic-invoke)]

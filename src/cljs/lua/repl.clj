@@ -15,7 +15,8 @@
 (def replace-forms {'(extend-type js/Date) nil                   
                     '(extend-type array) '(extend-type table)
                     '(set! js/String.prototype.apply) nil
-                    '(extend-type js/String) nil })
+                    '(extend-type js/String) nil
+                    '(deftype Keyword) nil})
 
 (def core-forms-seq
   (cloader/core-forms-seq (io/resource "core-lua.cljs")
@@ -96,9 +97,9 @@
           (println (.getCanonicalPath pipe-out)))
 
         ;; Eval core.cljs forms
-        (binding [*repl-verbose* true
+        (binding [*repl-verbose* false
                   *error-fatal?* true]
-          (eval-core-forms eval-form 350))
+          (eval-core-forms eval-form 360))
         
         ;; Eval common ns form
         (eval-form (new-env) '(ns cljs.user)) 
