@@ -13,7 +13,7 @@
 (def next-core-form (atom 0))
 
 (def replace-forms {'(extend-type js/Date) nil                   
-                    '(extend-type array) '(extend-type table)
+                    '(extend-type array) '(deftype Array)
                     '(set! js/String.prototype.apply) nil
                     '(extend-type js/String) nil
                     '(deftype Keyword) nil})
@@ -97,9 +97,9 @@
           (println (.getCanonicalPath pipe-out)))
 
         ;; Eval core.cljs forms
-        (binding [*repl-verbose* false
+        (binding [*repl-verbose* true
                   *error-fatal?* true]
-          (eval-core-forms eval-form 360))
+          (eval-core-forms eval-form 362))
         
         ;; Eval common ns form
         (eval-form (new-env) '(ns cljs.user)) 

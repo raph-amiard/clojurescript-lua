@@ -315,8 +315,7 @@
       'number "number"
       'table "table"
       'function "function"
-      'boolean "boolean"
-      'default "_"})
+      'boolean "boolean"})
 
 (defmacro reify [& impls]
   (let [t      (gensym "t")
@@ -385,49 +384,35 @@
                                         (core/str "WARNING: Symbol " % " is not a protocol")))
                                     (cljs.analyzer/warning &env
                                       (core/str "WARNING: Can't resolve protocol symbol " %)))))
-        skip-flag (set (-> tsym meta :skip-protocol-flag))]
-    (if (base-type tsym)
-      (let [t (base-type tsym)
-            assign-impls (fn [[p sigs]]
-                           (warn-if-not-protocol p)
-                           (let [psym (resolve p)
-                                 pfn-prefix (subs (core/str psym) 0 (clojure.core/inc (.indexOf (core/str psym) "/")))
-                                 res (cons `(asetg ~psym ~t true)
-                                           (mapcat
-                                            (fn [[f & meths :as form]]
-                                              (if (= psym 'cljs.core/IFn)
-                                                [`(asetg ~(basic-type-method f) ~t ~(with-meta `(fn ~@meths) (meta form)))
-                                                 `(set! (.-__call (lua/getmetatable ~({'string "" 'number 0} tsym)))
-                                                        (agetg ~(basic-type-method f) ~t))]
-                                                [`(asetg ~(basic-type-method f) ~t ~(with-meta `(fn ~@meths) (meta form)))]))
-                                                sigs))]
-                               res))]
-        `(do ~@(mapcat assign-impls impl-map)
-             nil))
-      (let [t (resolve tsym)
-            prototype-prefix (fn [sym]
-                               `(.. ~tsym -proto_methods ~(to-property sym)))
-            assign-impls (fn [[p sigs]]
-                           (warn-if-not-protocol p)
-                           (let [psym (resolve p)
-                                 pprefix (protocol-prefix psym)]
-                             (concat [`(asetg ~psym ~t true)]
-                                     (when-not (skip-flag psym)
-                                       [`(set! ~(prototype-prefix pprefix) true)])
-                                     (mapcat (fn [[f & meths :as form]]                                               
-                                               (let [pf (core/str pprefix f)
-                                                     adapt-params (fn [[[targ & args :as sig] & body]]
-                                                                    (cons (vec (cons (vary-meta targ assoc :tag t) args))
-                                                                          body))]
-                                                 (if (vector? (first meths))
-                                                   [`(set! ~(prototype-prefix (core/str pf "__arity__" (count (first meths))))
-                                                           ~(with-meta `(fn ~@(adapt-params meths)) (meta form)))]
-                                                   (map (fn [[sig & body :as meth]]
-                                                          `(set! ~(prototype-prefix (core/str pf "__arity__" (count sig)))
-                                                                 ~(with-meta `(fn ~(adapt-params meth)) (meta form))))
-                                                        meths))))
-                                             sigs))))]
-        `(do ~@(mapcat assign-impls impl-map))))))
+        skip-flag (set (-> tsym meta :skip-protocol-flag))
+        base-type (base-type tsym)
+        t (if base-type tsym (resolve tsym))
+        prototype-prefix (fn [sym]
+                           `(.. ~@(if base-type
+                                   `((~(symbol (clojure.core/str "builtins/get" (if (= 'nil tsym) "nil" tsym) "proto"))))
+                                   `(~tsym -proto_methods)) ~(to-property sym)))
+        
+        assign-impls (fn [[p sigs]]
+                       (warn-if-not-protocol p)
+                       (let [psym (resolve p)
+                             pprefix (protocol-prefix psym)]
+                         (concat [`(asetg ~psym ~(if base-type (clojure.core/str tsym) t) true)]
+                                 (when-not (skip-flag psym)
+                                   [`(set! ~(prototype-prefix pprefix) true)])
+                                 (mapcat (fn [[f & meths :as form]]                                               
+                                           (let [pf (core/str pprefix f)
+                                                 adapt-params (fn [[[targ & args :as sig] & body]]
+                                                                (cons (vec (cons (vary-meta targ assoc :tag t) args))
+                                                                      body))]
+                                             (if (vector? (first meths))
+                                               [`(set! ~(prototype-prefix (core/str pf "__arity__" (count (first meths))))
+                                                       ~(with-meta `(fn ~@(adapt-params meths)) (meta form)))]
+                                               (map (fn [[sig & body :as meth]]
+                                                      `(set! ~(prototype-prefix (core/str pf "__arity__" (count sig)))
+                                                             ~(with-meta `(fn ~(adapt-params meth)) (meta form))))
+                                                    meths))))
+                                         sigs))))]
+    `(do ~@(mapcat assign-impls impl-map))))
 
 
 (defn- prepare-protocol-masks [env t impls]
@@ -613,14 +598,10 @@
         methods (if (core/string? (first doc+methods)) (next doc+methods) doc+methods)
         expand-sig (fn [fname slot sig]
                      `(~sig
-                       (if (and ~(first sig) (not-primitive? ~(first sig)) (.. ~(first sig) -proto_methods ~(symbol (core/str "-" slot)))) ;; Property access needed here.
-                         (.. ~(first sig) -proto_methods (~slot ~@sig))
-                         ((or
-                           (agetg ~(basic-type-method fname) (lua/type ~(first sig)))
-                           (agetg ~(basic-type-method fname) "_")
-                           (throw (missing-protocol
-                                    ~(core/str psym "." fname) ~(first sig))))
-                          ~@sig))))
+                       (if (.. ~(first sig) -proto_methods ~(symbol (core/str "-" slot)))
+                        (.. ~(first sig) -proto_methods (~slot ~@sig))
+                        (throw (missing-protocol
+                                ~(core/str psym "." fname) ~(first sig))))))
         method (fn [[fname & sigs]]
                  (let [sigs (take-while vector? sigs)
                        slot (symbol (core/str prefix (name fname)))
@@ -908,7 +889,7 @@
                     (interpose ",")
                     (apply core/str))]
    (concat
-    (list 'js* (core/str "({" xs-str "})"))
+    (list 'js* (core/str "(builtins.array_init({" xs-str "}))"))
     rest)))
 
 (defmacro js-obj [& rest]

@@ -2,7 +2,38 @@ builtins = {}
 basic_types_prot_functions = {}
 js = {}
 
-debug.setmetatable(0, {})
+
+function builtins.create_proto_table()
+   local ptable = {}
+   setmetatable(ptable, {__index=cljs.core.default_proto_table()})
+   return ptable
+end
+
+function builtins.getnilproto()
+   return (nil).proto_methods
+end
+
+function builtins.getbooleanproto()
+   return (false).proto_methods
+end
+
+function builtins.getstringproto()
+   return ("").proto_methods
+end
+
+function builtins.getnumberproto()
+   return (0).proto_methods
+end
+
+
+-- Metatables initialisation
+function builtins.init_meta_tables()
+   debug.setmetatable(0, {__index={proto_methods=builtins.create_proto_table()}})
+   debug.setmetatable(false, {__index={proto_methods=builtins.create_proto_table()}})
+   debug.setmetatable(nil, {__index={proto_methods=builtins.create_proto_table()}})
+   getmetatable("").__index.proto_methods=builtins.create_proto_table()
+end
+
 
 require("bit")
 
@@ -33,7 +64,14 @@ function builtins.array_copy(t)
 end
 
 function builtins.array(...)
-   return {...}
+   return builtins.array_init({...})
+end
+
+function builtins.array_init(arr)
+   arr.proto_methods = cljs.core.Array.proto_methods
+   arr.constructor = cljs.core.Array
+   setmetatable(arr, {__call=builtins.IFnCall})
+   return arr
 end
 
 function builtins.type(x)
@@ -104,8 +142,8 @@ end
 
 function builtins.array_to_string(a)
    local b = {}
-   for k,v in pairs(a) do
-      b[k] = cljs.core.toString(v)
+   for k,v in ipairs(a) do
+      b[k] = cljs.core.str(v)
    end
    return "<Array " .. table.concat(b, ", ") .. ">"
 end

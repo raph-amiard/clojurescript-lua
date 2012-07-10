@@ -681,7 +681,7 @@
     (emitln "require '" (munge lib) "'")))
 
 (defmethod emit :deftype*
-  [{:keys [t fields pmasks]}]
+  [{:keys [t fields pmasks] :as info}]
   (let [fields (map munge fields)]
     (emitln "")
     (emitln "--[[")
