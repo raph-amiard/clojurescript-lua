@@ -21,7 +21,7 @@
 (def lua-reserved
   #{"and" "break" "do" "else" "elseif" "end" "for"
     "function" "if" "local" "nil" "not" "or" "repeat" "return" "then"
-    "until" "while"})
+    "until" "while" "bit"})
 
 (def cljs-reserved-file-names #{"deps.cljs"})
 
@@ -591,7 +591,7 @@
         fn? (and ana/*cljs-static-fns*
                  (not (:dynamic info))
                  (:fn-var info))
-        protocol (:protocol info)
+        protocol (:protocol info)        
         proto? (let [tag (infer-tag (first (:args expr)))]
                  (and protocol tag
                       (or ana/*cljs-static-fns*
@@ -603,6 +603,7 @@
                       (= (infer-tag (first (:args expr))) 'boolean))
         ns (:ns info)
         lua? (= ns 'lua)
+        constant-dest? (= (:op (first args)) :constant)
         keyword? (and (= (-> f :op) :constant)
                       (keyword? (-> f :form)))
         [f variadic-invoke]
@@ -636,10 +637,10 @@
        opt-not?
        (emits "not (" (first args) ")")
 
-       proto?
+       protocol
        (let [pimpl (str (protocol-prefix protocol)
                         (munge (name (:name info))) "__arity__" (count args))]
-         (emits (first args) ".proto_methods." pimpl "(" (comma-sep args) ")"))
+         (emits (when constant-dest? "(") (first args) (when constant-dest? ")") ".proto_methods." pimpl "(" (comma-sep args) ")"))
 
        keyword?
        (emits "(" f ")(" (comma-sep args) ")")
