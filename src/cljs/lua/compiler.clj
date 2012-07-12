@@ -290,7 +290,7 @@
   (let [checked (not (or unchecked (safe-test? test)))
         test-str (str (when checked "cljs.core.truth_") "(" (emit-str test) ")")]
     (if (in-expr? env)
-      (emits "(function () if " test-str " then return " then " else return " else " end end)()")
+      (emits "unbox_tern(" test-str " and box_tern(" then ") or box_tern(" else "))")
       (do
         (emitln "if " test-str " then")
         (emitln then " else ")
@@ -649,16 +649,17 @@
        (let [mfa (:max-fixed-arity variadic-invoke)]
         (emits f "(" (comma-sep (take mfa args))
                (when-not (zero? mfa) ",")
-               "cljs.core.array_seq([" (comma-sep (drop mfa args)) "], 0))"))
+               "cljs.core.array_seq({" (comma-sep (drop mfa args)) "}, 0))"))
        
        (or fn? lua?)
        (emits f "(" (comma-sep args)  ")")
        
        :else
-       (if (and ana/*cljs-static-fns* (= (:op f) :var))
-         (let [fprop (str ".cljs__lang__arity__" (count args))]
-           (emits "(" f fprop " ? " f fprop "(" (comma-sep args) ") : " f "(" (comma-sep args) "))"))
-         (emits f "(" (comma-sep args) ")"))))))
+;       (if (and ana/*cljs-static-fns* (= (:op f) :var))
+;         (let [fprop (str ".cljs__lang__arity__" (count args))]
+;           (emits f fprop "(" (comma-sep args) ")"))
+;           (emits "(" f fprop " ? " f fprop "(" (comma-sep args) ") : " f "(" (comma-sep args) "))"))
+         (emits f "(" (comma-sep args) ")")))))
 
 (defmethod emit :new
   [{:keys [ctor args env]}]
@@ -696,7 +697,7 @@
     (emitln "instance.constructor = " (munge t))
     (doseq [fld fields]
       (emitln "instance." fld " = " fld))
-    (emitln "setmetatable(instance, {__call=builtins.IFnCall})")
+    (emitln "setmetatable(instance, builtins.type_instance_mt)")
     (comment (doseq [[pno pmask] pmasks]
                (emitln "instance.cljs__lang__protocol_mask__partition" pno "__ = " pmask)))
     (emitln "return instance")
@@ -731,4 +732,5 @@
 
 (defmacro lua [form]
   `(ana/with-core-macros "/cljs/lua/core"
-     (emit (ana/analyze {:ns (@ana/namespaces 'cljs.user) :context :statement :locals {}} '~form))))
+     (binding [ana/*cljs-static-fns* true]
+       (emit (ana/analyze {:ns (@ana/namespaces 'cljs.user) :context :statement :locals {}} '~form)))))

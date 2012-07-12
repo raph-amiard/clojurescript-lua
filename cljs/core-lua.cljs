@@ -1,5 +1,19 @@
 (ns cljs.core)
 
+(defn ^seq rest
+  "Returns a possibly empty seq of the items after the first. Calls seq on its
+  argument."
+  [coll]
+  (set! *unchecked-if* true) 
+  (if-not (nil? coll)
+    (if (satisfies? ISeq coll)
+      (-rest coll)
+      (let [s (seq coll)]
+        (if-not (nil? s)
+          (-rest s)
+          ())))
+    ()))
+
 (defn truth_
   "Internal - do not use!"
   [x]
@@ -169,7 +183,6 @@
      (js* "{()}"))
   ([& keyvals] (lua/error "Not implemented !")))
 
-
 (defn js-obj
   ([]
      (js* "({})"))
@@ -321,6 +334,9 @@
   ([ns name] (keyword (str* ns "/" name))))
 
 (extend-type string
+  IEquiv
+  (-equiv [s o] (identical? s o))
+  
   IHash
   (-hash [o] (string/hashCode o))
 
@@ -382,6 +398,12 @@
         (do (table/insert ary (first s))
             (recur (next s)))
         ary))))
+
+
+(defn- fix [q]
+  (if (>= q 0)
+    (math/floor q)
+    (math/ceil q)))
 
 (defn apply
   "Applies fn f to the argument list formed by prepending intervening arguments to args.
@@ -1672,3 +1694,4 @@
 
   ITransientMap
   (-dissoc! [tcoll key] (twithout! tcoll key)))
+

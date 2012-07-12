@@ -1008,10 +1008,15 @@
 (defmacro time
   "Evaluates expr and prints the time it took. Returns the value of expr."
   [expr]
-  `(let [start# (.getTime (js/Date.) ())
+  `(let [start# (socket/gettime)
          ret# ~expr]
-     (prn (core/str "Elapsed time: " (- (.getTime (js/Date.) ()) start#) " msecs"))
+     (lua/print (core/str "Elapsed time: " (* 1000 (- (socket/gettime) start#)) " msecs"))
      ret#))
+
+(defmacro lua-require [lib]
+  `(do
+     (lua/require ~lib)
+     nil))
 
 (defmacro simple-benchmark
   "Runs expr iterations times in the context of a let expression with

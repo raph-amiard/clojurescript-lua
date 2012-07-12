@@ -2,7 +2,6 @@ builtins = {}
 basic_types_prot_functions = {}
 js = {}
 
-
 function builtins.create_proto_table()
    local ptable = {}
    setmetatable(ptable, {__index=cljs.core.default_proto_table()})
@@ -34,6 +33,15 @@ function builtins.init_meta_tables()
    getmetatable("").__index.proto_methods=builtins.create_proto_table()
 end
 
+tern_box_val = nil
+function box_tern(val)
+   tern_box_val = val
+   return true
+end
+
+function unbox_tern(val)
+   return tern_box_val
+end
 
 require("bit")
 
@@ -186,3 +194,5 @@ function builtins.IFnCall(obj, ...)
    local fn_name = "cljs__core__IFn___invoke__arity__" .. tostring(len)
    return obj.proto_methods[fn_name](obj, ...)
 end
+
+builtins.type_instance_mt = {__call = builtins.IFnCall }

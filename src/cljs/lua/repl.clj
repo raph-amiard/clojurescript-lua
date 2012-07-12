@@ -6,7 +6,7 @@
             [clojure.data.json :as json])
   (:import  [java.io PrintWriter File FileInputStream FileOutputStream]))
 
-(def lua-interp "lua")
+(def lua-interp "luajit-2.0.0-beta10")
 (def ^:dynamic *repl-verbose* true)
 (def ^:dynamic *repl-exec* true)
 (def ^:dynamic *error-fatal?* false)
@@ -54,6 +54,7 @@
   (ana/with-core-macros "/cljs/lua/core"
     (println "Cljs/Lua repl")    
     (binding [ana/*cljs-ns* 'cljs.user
+              ana/*cljs-static-fns* true
               *repl-verbose* true
               *repl-exec* true]      
       (let [;; Lua subprocess
@@ -101,7 +102,7 @@
                   *error-fatal?* true]
           (eval-core-forms eval-form 406))
         
-        ;; Eval common ns form
+        ;; Eval common ns formo
         (eval-form (new-env) '(ns cljs.user)) 
         
         ;; Repl loop
