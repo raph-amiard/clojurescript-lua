@@ -1,3 +1,5 @@
+require("bit")
+
 builtins = {}
 basic_types_prot_functions = {}
 js = {}
@@ -42,8 +44,6 @@ end
 function unbox_tern(val)
    return tern_box_val
 end
-
-require("bit")
 
 function string:split(sep)
    local sep, fields = sep or ":", {}
