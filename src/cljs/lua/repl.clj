@@ -7,7 +7,7 @@
             [cljs.lua.common :as com])
   (:import  [java.io PrintWriter File FileInputStream FileOutputStream]))
 
-(def lua-interp "luajit-2.0.0-beta10")
+(def lua-interp "lua")
 (def ^:dynamic *repl-verbose* true)
 (def ^:dynamic *repl-exec* true)
 (def ^:dynamic *error-fatal?* false)
