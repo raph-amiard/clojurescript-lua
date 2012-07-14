@@ -1695,3 +1695,752 @@
   ITransientMap
   (-dissoc! [tcoll key] (twithout! tcoll key)))
 
+
+(defn- balance-left [key val ins right]
+  (if (instance? RedNode ins)
+    (cond
+      (instance? RedNode (.-left ins))
+      (RedNode. (.-key ins) (.-val ins)
+              (blacken (.-left ins))
+              (BlackNode. key val (.-right ins) right nil)
+              nil)
+
+      (instance? RedNode (.-right ins))
+      (RedNode. (.. ins -right -key) (.. ins -right -val)
+                (BlackNode. (.-key ins) (.-val ins)
+                            (.-left ins)
+                            (.. ins -right -left)
+                            nil)
+                (BlackNode. key val
+                            (.. ins -right -right)
+                            right
+                            nil)
+                nil)
+
+      :else
+      (BlackNode. key val ins right nil))
+    (BlackNode. key val ins right nil)))
+
+(defn- balance-right [key val left ins]
+  (if (instance? RedNode ins)
+    (cond
+      (instance? RedNode (.-right ins))
+      (RedNode. (.-key ins) (.-val ins)
+                (BlackNode. key val left (.-left ins) nil)
+                (blacken (.-right ins))
+                nil)
+
+      (instance? RedNode (.-left ins))
+      (RedNode. (.. ins -left -key) (.. ins -left -val)
+                (BlackNode. key val left (.. ins -left -left) nil)
+                (BlackNode. (.-key ins) (.-val ins)
+                            (.. ins -left -right)
+                            (.-right ins)
+                            nil)
+                nil)
+
+      :else
+      (BlackNode. key val left ins nil))
+    (BlackNode. key val left ins nil)))
+
+(defn- balance-left-del [key val del right]
+  (cond
+    (instance? RedNode del)
+    (RedNode. key val (blacken del) right nil)
+
+    (instance? BlackNode right)
+    (balance-right key val del (redden right))
+
+    (and (instance? RedNode right) (instance? BlackNode (.-left right)))
+    (RedNode. (.. right -left -key) (.. right -left -val)
+              (BlackNode. key val del (.. right -left -left) nil)
+              (balance-right (.-key right) (.-val right)
+                             (.. right -left -right)
+                             (redden (.-right right)))
+              nil)
+
+    :else
+    (throw (js/Error. "red-black tree invariant violation"))))
+
+(defn- balance-right-del [key val left del]
+  (cond
+    (instance? RedNode del)
+    (RedNode. key val left (blacken del) nil)
+
+    (instance? BlackNode left)
+    (balance-left key val (redden left) del)
+
+    (and (instance? RedNode left) (instance? BlackNode (.-right left)))
+    (RedNode. (.. left -right -key) (.. left -right -val)
+              (balance-left (.-key left) (.-val left)
+                            (redden (.-left left))
+                            (.. left -right -left))
+              (BlackNode. key val (.. left -right -right) del nil)
+              nil)
+
+    :else
+    (throw (js/Error. "red-black tree invariant violation"))))
+
+(deftype BlackNode [key val left right ^:mutable __hash]
+  Object
+  (toString [this]
+    (pr-str this))
+
+  IRBNode
+  (add-left [node ins]
+    (balance-left ins node))
+
+  (add-right [node ins]
+    (balance-right ins node))
+
+  (remove-left [node del]
+    (balance-left-del key val del right))
+
+  (remove-right [node del]
+    (balance-right-del key val left del))
+
+  (blacken [node] node)
+
+  (redden [node] (RedNode. key val left right nil))
+
+  (balance-left [node parent]
+    (BlackNode. (.-key parent) (.-val parent) node (.-right parent) nil))
+
+  (balance-right [node parent]
+    (BlackNode. (.-key parent) (.-val parent) (.-left parent) node nil))
+
+  (nreplace [node key val left right]
+    (BlackNode. key val left right nil))
+
+  (kv-reduce [node f init]
+    (tree-map-kv-reduce node f init))
+
+  IMapEntry
+  (-key [node] key)
+  (-val [node] val)
+
+  IHash
+  (-hash [coll] (caching-hash coll hash-coll __hash))
+
+  IEquiv
+  (-equiv [coll other] (equiv-sequential coll other))
+
+  IMeta
+  (-meta [node] nil)
+
+  IWithMeta
+  (-with-meta [node meta]
+    (with-meta [key val] meta))
+
+  IStack
+  (-peek [node] val)
+
+  (-pop [node] [key])
+
+  ICollection
+  (-conj [node o] [key val o])
+
+  IEmptyableCollection
+  (-empty [node] [])
+
+  ISequential
+  ISeqable
+  (-seq [node] (list key val))
+
+  ICounted
+  (-count [node] 2)
+
+  IIndexed
+  (-nth [node n]
+    (cond (== n 0) key
+          (== n 1) val
+          :else    nil))
+
+  (-nth [node n not-found]
+    (cond (== n 0) key
+          (== n 1) val
+          :else    not-found))
+
+  ILookup
+  (-lookup [node k] (-nth node k nil))
+  (-lookup [node k not-found] (-nth node k not-found))
+
+  IAssociative
+  (-assoc [node k v]
+    (assoc [key val] k v))
+
+  IVector
+  (-assoc-n [node n v]
+    (-assoc-n [key val] n v))
+
+  IReduce
+  (-reduce [node f]
+    (ci-reduce node f))
+
+  (-reduce [node f start]
+    (ci-reduce node f start))
+
+  IFn
+  (-invoke [node k]
+    (-lookup node k))
+
+  (-invoke [node k not-found]
+    (-lookup node k not-found)))
+
+
+(deftype RedNode [key val left right ^:mutable __hash]
+  Object
+  (toString [this]
+    (pr-str this))
+
+  IRBNode
+  (add-left [node ins]
+    (RedNode. key val ins right nil))
+
+  (add-right [node ins]
+    (RedNode. key val left ins nil))
+
+  (remove-left [node del]
+    (RedNode. key val del right nil))
+
+  (remove-right [node del]
+    (RedNode. key val left del nil))
+
+  (blacken [node]
+    (BlackNode. key val left right nil))
+
+  (redden [node]
+    (throw (js/Error. "red-black tree invariant violation")))
+
+  (balance-left [node parent]
+    (cond
+      (instance? RedNode left)
+      (RedNode. key val
+                (blacken left)
+                (BlackNode. (.-key parent) (.-val parent) right (.-right parent) nil)
+                nil)
+
+      (instance? RedNode right)
+      (RedNode. (.-key right) (.-val right)
+                (BlackNode. key val left (.-left right) nil)
+                (BlackNode. (.-key parent) (.-val parent)
+                            (.-right right)
+                            (.-right parent)
+                            nil)
+                nil)
+
+      :else
+      (BlackNode. (.-key parent) (.-val parent) node (.-right parent) nil)))
+
+  (balance-right [node parent]
+    (cond
+      (instance? RedNode right)
+      (RedNode. key val
+                (BlackNode. (.-key parent) (.-val parent)
+                            (.-left parent)
+                            left
+                            nil)
+                (blacken right)
+                nil)
+
+      (instance? RedNode left)
+      (RedNode. (.-key left) (.-val left)
+                (BlackNode. (.-key parent) (.-val parent)
+                            (.-left parent)
+                            (.-left left)
+                            nil)
+                (BlackNode. key val (.-right left) right nil)
+                nil)
+
+      :else
+      (BlackNode. (.-key parent) (.-val parent) (.-left parent) node nil)))
+
+  (nreplace [node key val left right]
+    (RedNode. key val left right nil))
+
+  (kv-reduce [node f init]
+    (tree-map-kv-reduce node f init))
+
+  IMapEntry
+  (-key [node] key)
+  (-val [node] val)
+
+  IHash
+  (-hash [coll] (caching-hash coll hash-coll __hash))
+
+  IEquiv
+  (-equiv [coll other] (equiv-sequential coll other))
+
+  IMeta
+  (-meta [node] nil)
+
+  IWithMeta
+  (-with-meta [node meta]
+    (with-meta [key val] meta))
+
+  IStack
+  (-peek [node] val)
+
+  (-pop [node] [key])
+
+  ICollection
+  (-conj [node o] [key val o])
+
+  IEmptyableCollection
+  (-empty [node] [])
+
+  ISequential
+  ISeqable
+  (-seq [node] (list key val))
+
+  ICounted
+  (-count [node] 2)
+
+  IIndexed
+  (-nth [node n]
+    (cond (== n 0) key
+          (== n 1) val
+          :else    nil))
+
+  (-nth [node n not-found]
+    (cond (== n 0) key
+          (== n 1) val
+          :else    not-found))
+
+  ILookup
+  (-lookup [node k] (-nth node k nil))
+  (-lookup [node k not-found] (-nth node k not-found))
+
+  IAssociative
+  (-assoc [node k v]
+    (assoc [key val] k v))
+
+  IVector
+  (-assoc-n [node n v]
+    (-assoc-n [key val] n v))
+
+  IReduce
+  (-reduce [node f]
+    (ci-reduce node f))
+
+  (-reduce [node f start]
+    (ci-reduce node f start))
+
+  IFn
+  (-invoke [node k]
+    (-lookup node k))
+
+  (-invoke [node k not-found]
+    (-lookup node k not-found)))
+
+
+(defn- tree-map-add [comp tree k v found]
+  (if (nil? tree)
+    (RedNode. k v nil nil nil)
+    (let [c (comp k (.-key tree))]
+      (cond
+        (zero? c)
+        (do (aset found 0 tree)
+            nil)
+
+        (neg? c)
+        (let [ins (tree-map-add comp (.-left tree) k v found)]
+          (if-not (nil? ins)
+            (add-left tree ins)))
+
+        :else
+        (let [ins (tree-map-add comp (.-right tree) k v found)]
+          (if-not (nil? ins)
+            (add-right tree ins)))))))
+
+(defn- tree-map-replace [comp tree k v]
+  (let [tk (.-key tree)
+        c  (comp k tk)]
+    (cond (zero? c) (nreplace tree tk v (.-left tree) (.-right tree))
+          (neg? c)  (nreplace tree tk (.-val tree) (tree-map-replace comp (.-left tree) k v) (.-right tree))
+          :else     (nreplace tree tk (.-val tree) (.-left tree) (tree-map-replace comp (.-right tree) k v)))))
+
+
+(deftype PersistentTreeMap [comp tree cnt meta ^:mutable __hash]
+  Object
+  (toString [this]
+    (pr-str this))
+
+  IPersistentTreeMap
+  (entry-at [coll k]
+    (loop [t tree]
+      (if-not (nil? t)
+        (let [c (comp k (.-key t))]
+          (cond (zero? c) t
+                (neg? c)  (recur (.-left t))
+                :else     (recur (.-right t)))))))
+  
+  IWithMeta
+  (-with-meta [coll meta] (PersistentTreeMap. comp tree cnt meta __hash))
+
+  IMeta
+  (-meta [coll] meta)
+
+  ICollection
+  (-conj [coll entry]
+    (if (vector? entry)
+      (-assoc coll (-nth entry 0) (-nth entry 1))
+      (reduce -conj
+              coll
+              entry)))
+
+  IEmptyableCollection
+  (-empty [coll] (with-meta cljs.core.PersistentTreeMap/EMPTY meta))
+
+  IEquiv
+  (-equiv [coll other] (equiv-map coll other))
+
+  IHash
+  (-hash [coll] (caching-hash coll hash-imap __hash))
+
+  ICounted
+  (-count [coll] cnt)
+
+  IKVReduce
+  (-kv-reduce [coll f init]
+    (if-not (nil? tree)
+      (tree-map-kv-reduce tree f init)
+      init))
+
+  IFn
+  (-invoke [coll k]
+    (-lookup coll k))
+
+  (-invoke [coll k not-found]
+    (-lookup coll k not-found))
+
+  ISeqable
+  (-seq [coll]
+    (if (pos? cnt)
+      (create-tree-map-seq tree true cnt)))
+
+  IReversible
+  (-rseq [coll]
+    (if (pos? cnt)
+      (create-tree-map-seq tree false cnt)))
+
+  ILookup
+  (-lookup [coll k]
+    (-lookup coll k nil))
+
+  (-lookup [coll k not-found]
+    (let [n (entry-at coll k)]
+      (if-not (nil? n)
+        (.-val n)
+        not-found)))
+
+  IAssociative
+  (-assoc [coll k v]
+    (let [found (array nil)
+          t     (tree-map-add comp tree k v found)]
+      (if (nil? t)
+        (let [found-node (nth found 0)]
+          (if (= v (.-val found-node))
+            coll
+            (PersistentTreeMap. comp (tree-map-replace comp tree k v) cnt meta nil)))
+        (PersistentTreeMap. comp (blacken t) (inc cnt) meta nil))))
+
+  (-contains-key? [coll k]
+    (not (nil? (entry-at coll k))))
+
+  IMap
+  (-dissoc [coll k]
+    (let [found (array nil)
+          t     (tree-map-remove comp tree k found)]
+      (if (nil? t)
+        (if (nil? (nth found 0))
+          coll
+          (PersistentTreeMap. comp nil 0 meta nil))
+        (PersistentTreeMap. comp (blacken t) (dec cnt) meta nil))))
+
+  ISorted
+  (-sorted-seq [coll ascending?]
+    (if (pos? cnt)
+      (create-tree-map-seq tree ascending? cnt)))
+
+  (-sorted-seq-from [coll k ascending?]
+    (if (pos? cnt)
+      (loop [stack nil t tree]
+        (if-not (nil? t)
+          (let [c (comp k (.-key t))]
+            (cond
+              (zero? c)  (PersistentTreeMapSeq. nil (conj stack t) ascending? -1 nil)
+              ascending? (if (neg? c)
+                           (recur (conj stack t) (.-left t))
+                           (recur stack          (.-right t)))
+              :else      (if (pos? c)
+                           (recur (conj stack t) (.-right t))
+                           (recur stack          (.-left t)))))
+          (if (nil? stack)
+            (PersistentTreeMapSeq. nil stack ascending? -1 nil))))))
+
+  (-entry-key [coll entry] (key entry))
+
+  (-comparator [coll] comp))
+
+(defn obj-map
+  "keyval => key val
+  Returns a new object map with supplied mappings."
+  [& keyvals]
+  (let [ks  (array)
+        obj (js-obj)]
+    (loop [kvs (seq keyvals)]
+      (if kvs
+        (do (table/insert ks (first kvs))
+            (asetg obj (first kvs) (second kvs))
+            (recur (nnext kvs)))
+        (cljs.core.ObjMap/fromObject ks obj)))))
+
+
+(deftype Range [meta start end step ^:mutable __hash]
+  Object
+  (toString [this]
+    (pr-str this))
+  
+  IWithMeta
+  (-with-meta [rng meta] (Range. meta start end step __hash))
+
+  IMeta
+  (-meta [rng] meta)
+
+  ISeqable
+  (-seq [rng]
+    (if (pos? step)
+      (when (< start end)
+        rng)
+      (when (> start end)
+        rng)))
+
+  ISeq
+  (-first [rng] start)
+  (-rest [rng]
+    (if-not (nil? (-seq rng))
+      (Range. meta (+ start step) end step nil)
+      ()))
+
+  INext
+  (-next [rng]
+    (if (pos? step)
+      (when (< (+ start step) end)
+        (Range. meta (+ start step) end step nil))
+      (when (> (+ start step) end)
+        (Range. meta (+ start step) end step nil))))
+
+  ICollection
+  (-conj [rng o] (cons o rng))
+
+  IEmptyableCollection
+  (-empty [rng] (with-meta cljs.core.List/EMPTY meta))
+
+  ISequential
+  IEquiv
+  (-equiv [rng other] (equiv-sequential rng other))
+
+  IHash
+  (-hash [rng] (caching-hash rng hash-coll __hash))
+
+  ICounted
+  (-count [rng]
+    (if-not (-seq rng)
+      0
+      (math/ceil (/ (- end start) step))))
+
+  IIndexed
+  (-nth [rng n]
+    (if (< n (-count rng))
+      (+ start (* n step))
+      (if (and (> start end) (zero? step))
+        start
+        (throw (js/Error. "Index out of bounds")))))
+  (-nth [rng n not-found]
+    (if (< n (-count rng))
+      (+ start (* n step))
+      (if (and (> start end) (zero? step))
+        start
+        not-found)))
+
+  IReduce
+  (-reduce [rng f] (ci-reduce rng f))
+  (-reduce [rng f s] (ci-reduce rng f s)))
+
+
+(defn regexp? [o] (throw "NIY"))
+
+(defn re-matches
+  "Returns the result of (re-find re s) if re fully matches s."
+  [re s]
+  (throw "NIY"))
+
+(defn re-find
+  "Returns the first regex match, if any, of s to re, using
+  re.exec(s). Returns a vector, containing first the matching
+  substring, then any capturing groups if the regular expression contains
+  capturing groups."
+  [re s]
+  (throw "NIY"))
+
+(defn re-seq
+  "Returns a lazy sequence of successive matches of re in s."
+  [re s]
+  (throw "NIY"))
+
+(defn re-pattern
+  "Returns an instance of RegExp which has compiled the provided string."
+  [s]
+  (throw "NIY"))
+
+(defn- pr-seq [obj opts]
+  (cond
+    (nil? obj) (list "nil")
+    :else (concat
+            (when (and (get opts :meta)
+                       (satisfies? IMeta obj)
+                       (meta obj))
+              (concat ["^"] (pr-seq (meta obj) opts) [" "]))
+            (cond
+             ;; handle CLJS ctors
+             (and (not (nil? obj))
+                  ^boolean (.-cljs__lang__type obj))
+             (.cljs__lang__ctorPrSeq obj obj)
+
+             (satisfies? IPrintable obj) (-pr-seq obj opts)
+
+             (regexp? obj) (list "#\"" (.-source obj) "\"")
+
+             :else (list "#<" (str obj) ">")))))
+
+(defn- pr-sb [objs opts]
+  (let [first-obj (first objs)
+        tbl (js-obj)]
+    (doseq [obj objs]
+      (when-not (identical? obj first-obj)
+        (table/insert tbl " "))
+      (doseq [string (pr-seq obj opts)]
+        (table/insert tbl string)))
+    (table/concat sb)))
+
+(defn prn-str-with-opts
+  "Same as pr-str-with-opts followed by (newline)"
+  [objs opts]
+  (let [sb (pr-sb objs opts)]
+    (table/insert sb \newline)
+    (str sb)))
+
+(extend-protocol IPrintable
+  boolean
+  (-pr-seq [bool opts] (list (str bool)))
+
+  number
+  (-pr-seq [n opts] (list (str n)))
+
+  Array
+  (-pr-seq [a opts]
+    (pr-sequential pr-seq "#<Array [" ", " "]>" opts a))
+
+  string
+  (-pr-seq [obj opts]
+    (cond
+     (keyword? obj)
+     (list (str ":"
+                (when-let [nspc (namespace obj)]
+                  (str nspc "/"))
+                (name obj)))
+     (symbol? obj)
+     (list (str (when-let [nspc (namespace obj)]
+                  (str nspc "/"))
+                (name obj)))
+     :else (list (if (:readably opts)
+                   (goog.string.quote obj)
+                   obj))))
+
+  LazySeq
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll))
+
+  IndexedSeq
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll))
+
+  RSeq
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll))
+
+  PersistentQueue
+  (-pr-seq [coll opts] (pr-sequential pr-seq "#queue [" " " "]" opts (seq coll)))
+
+  PersistentTreeMapSeq
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll))
+
+  NodeSeq
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll))
+
+  ArrayNodeSeq
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll))
+
+  List
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll))
+
+  Cons
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll))
+
+  EmptyList
+  (-pr-seq [coll opts] (list "()"))
+
+  Vector
+  (-pr-seq [coll opts] (pr-sequential pr-seq "[" " " "]" opts coll))
+
+  PersistentVector
+  (-pr-seq [coll opts] (pr-sequential pr-seq "[" " " "]" opts coll))
+
+  ChunkedCons
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll))
+
+  ChunkedSeq
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll))
+
+  Subvec
+  (-pr-seq [coll opts] (pr-sequential pr-seq "[" " " "]" opts coll))
+
+  BlackNode
+  (-pr-seq [coll opts] (pr-sequential pr-seq "[" " " "]" opts coll))
+
+  RedNode
+  (-pr-seq [coll opts] (pr-sequential pr-seq "[" " " "]" opts coll))
+
+  ObjMap
+  (-pr-seq [coll opts]
+    (let [pr-pair (fn [keyval] (pr-sequential pr-seq "" " " "" opts keyval))]
+      (pr-sequential pr-pair "{" ", " "}" opts coll)))
+
+  HashMap
+  (-pr-seq [coll opts]
+    (let [pr-pair (fn [keyval] (pr-sequential pr-seq "" " " "" opts keyval))]
+      (pr-sequential pr-pair "{" ", " "}" opts coll)))
+
+  PersistentArrayMap
+  (-pr-seq [coll opts]
+    (let [pr-pair (fn [keyval] (pr-sequential pr-seq "" " " "" opts keyval))]
+      (pr-sequential pr-pair "{" ", " "}" opts coll)))
+
+  PersistentHashMap
+  (-pr-seq [coll opts]
+    (let [pr-pair (fn [keyval] (pr-sequential pr-seq "" " " "" opts keyval))]
+      (pr-sequential pr-pair "{" ", " "}" opts coll)))
+
+  PersistentTreeMap
+  (-pr-seq [coll opts]
+    (let [pr-pair (fn [keyval] (pr-sequential pr-seq "" " " "" opts keyval))]
+      (pr-sequential pr-pair "{" ", " "}" opts coll)))
+
+  PersistentHashSet
+  (-pr-seq [coll opts] (pr-sequential pr-seq "#{" " " "}" opts coll))
+
+  PersistentTreeSet
+  (-pr-seq [coll opts] (pr-sequential pr-seq "#{" " " "}" opts coll))
+
+  Range
+  (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll)))
+
+

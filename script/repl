@@ -11,7 +11,7 @@ for next in $DIR/../cljs $DIR/../lib/* $DIR/../src $DIR/../libclojurescript.jar;
 done
 
 if command -v rlwrap >/dev/null 2>&1; then
-    JCMD="rlwrap java"
+    JCMD="java"
 else
     JCMD="java"
 fi

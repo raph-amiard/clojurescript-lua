@@ -157,16 +157,6 @@ function builtins.array_to_string(a)
 end
 
 
-builtins.StringBuffer = {}
-function builtins.StringBuffer.new()
-   sb = {}
-   function sb.append (self, str)
-      table.insert(str)
-   end
-   function sb.toString(self, str)
-   end
-end
-
 function table.slice (values,i1,i2)
    local res = {}
    local n = #values

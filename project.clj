@@ -6,5 +6,5 @@
   :extra-classpath-dirs ["libclojurescript.jar"]
   :resources-path "cljs"
   :source-path "src"
-  :main cljs.lua.compiler
+  :main cljs.lua.compile
 )

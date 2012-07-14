@@ -3,6 +3,7 @@
   (:require [cljs.analyzer :as ana]
             [clojure.java.io :as io]
             [clojure.string :as string]
+            [clojure.pprint :as ppr]
             [cljs.tagged-literals :as tags])
   (:import java.lang.StringBuilder))
 
@@ -12,8 +13,6 @@
 (def ^:dynamic *emit-comments* false)
 (def ^:dynamic *def-name* nil)
 (def ^:dynamic *def-symbol* nil)
-
-
 
 (defn in-expr? [env]
   (= :expr (:context env)))
@@ -40,14 +39,12 @@
   (interpose "," xs))
 
 (defn- escape-char [^Character c]
-  c)
-(comment
   (let [cp (.hashCode c)]
     (case cp
-      ; Handle printable escapes before ASCII
+      ;; Handle printable escapes before ASCII
       34 "\\\""
       92 "\\\\"
-      ; Handle non-printable escapes
+      ;; Handle non-printable escapes
       8 "\\b"
       12 "\\f"
       10 "\\n"
@@ -55,7 +52,7 @@
       9 "\\t"
       (if (< 31 cp 127)
         c ; Print simple ASCII characters
-        (format "\\u%04X" cp))))) ; Any other character is Unicode
+        c )))) ; (format "\\u%04X" cp))))) ; Any other character is Unicode
 
 
 (defn- escape-string [^CharSequence s]
@@ -184,6 +181,11 @@
      ~@body
      (when-not (= :expr (:context env#)) (emitln ""))))
 
+(defmacro when-emit-wrap [emit-wrap? env & body]
+  `(if ~emit-wrap?
+     (emit-wrap ~env ~@body)
+    ~@body))
+
 (defmethod emit :no-op
   [m] (emitln "do end"))
 
@@ -204,7 +206,6 @@
 (def ^:private array-map-threshold 16)
 (def ^:private obj-map-threshold 32)
 
-;; TODO
 (defmethod emit :map
   [{:keys [env simple-keys? keys vals]}]
   (emit-wrap env
@@ -235,7 +236,6 @@
              (comma-sep vals)
              "})"))))
 
-;; TODO
 (defmethod emit :vector
   [{:keys [items env]}]
   (emit-wrap env
@@ -245,14 +245,12 @@
              (comma-sep items) "}, true)"))))
 
 
-;; TODO
 (defmethod emit :set
   [{:keys [items env]}]
   (emit-wrap env
     (emits "cljs.core.set({"
            (comma-sep items) "})")))
 
-;; TODO
 (defmethod emit :constant
   [{:keys [form env]}]
   (when-not (= :statement (:context env))
@@ -360,63 +358,68 @@
     (emits "end)")))
 
 (defn emit-fn-method
-  [{:keys [gthis name variadic params statements ret env recurs max-fixed-arity]}]
-  (emit-wrap env
-             (binding [*loop-var* (if recurs (gensym "loop_var_fnm") *loop-var*)]
-               (emitln "(function (" (comma-sep (map munge params)) ")")
-               (when gthis
-                 (emitln "local " gthis " = " (munge (first params))))
-               (when recurs
-                 (emitln "local " *loop-var* " = true")
-                 (emitln "while " *loop-var* " do")
-                 (emitln *loop-var* " = false"))
-               (emit-block :return statements ret)
-               (when recurs
-                 (emitln "end"))
-               (emits "end)"))))
+  ([emit-wrap? {:keys [gthis name variadic params statements ret env recurs max-fixed-arity]}]
+     (when-emit-wrap
+      emit-wrap? env
+      (binding [*loop-var* (if recurs (gensym "loop_var_fnm") *loop-var*)]
+        (emitln "(function (" (comma-sep (map munge params)) ")")
+        (when gthis
+          (emitln "local " gthis " = " (munge (first params))))
+        (when recurs
+          (emitln "local " *loop-var* " = true")
+          (emitln "while " *loop-var* " do")
+          (emitln *loop-var* " = false"))
+        (emit-block :return statements ret)
+        (when recurs
+          (emitln "end"))
+        (emits "end)"))))
+  ([mp]
+     (emit-fn-method true mp)))
 
 (defn emit-variadic-fn-method
-  [{:keys [gthis name variadic params statements ret env recurs max-fixed-arity] :as f}]
-  (emit-wrap
-   env
-   (let [name (or name (gensym))
-         mname (munge name)
-         params (map munge params)
-         delegate-name (str mname "__delegate")]
-     (emitln "(function () ")
-     (emitln "local " delegate-name " = function (" (comma-sep params) ")")
-     (binding [*loop-var* (if recurs (gensym "loop_var_vfnm") *loop-var*)]
-       (when recurs
-         (emitln "local " *loop-var* " = true")
-         (emitln "while " *loop-var* " do")
-         (emitln *loop-var* " = false"))
-       (emit-block :return statements ret)
-       (when recurs
-         (emitln "end")))
-
-     (emitln "end")
-
-     (emitln "local " mname " = {}")
-     (emitln "local " mname "__func = function (_, " (comma-sep
-                                             (if variadic
-                                               (concat (butlast params) ["..."])
-                                               params)) ")")
-     (when gthis
-       (emitln "local " gthis " = " (munge (first params))))
-     (when variadic
-       (emitln "local " (last params) " = cljs.core.array_seq({...},0);"))
-     
-     (emitln "return " delegate-name "(" (comma-sep params) ")")
-     (emitln "end")
-     
-     (emitln mname ".cljs__lang__maxFixedArity = " max-fixed-arity)
-     (emits mname ".cljs__lang__applyTo = ")
-     (emit-apply-to (assoc f :name name))
-     (emitln "")
-     (emitln mname ".cljs__lang__arity__variadic = " delegate-name)
-     (emitln "setmetatable(" mname ", {['__call'] = " mname "__func })")
-     (emitln "return " mname)
-     (emitln "end)()"))))
+  ([emit-wrap? {:keys [gthis name variadic params statements ret env recurs max-fixed-arity] :as f}]
+     (when-emit-wrap
+      emit-wrap?
+      env
+      (let [name (or name (gensym))
+            mname (munge name)
+            params (map munge params)
+            delegate-name (str mname "__delegate")]
+        (emitln "(function () ")
+        (emitln "local " delegate-name " = function (" (comma-sep params) ")")
+        (binding [*loop-var* (if recurs (gensym "loop_var_vfnm") *loop-var*)]
+          (when recurs
+            (emitln "local " *loop-var* " = true")
+            (emitln "while " *loop-var* " do")
+            (emitln *loop-var* " = false"))
+          (emit-block :return statements ret)
+          (when recurs
+            (emitln "end")))
+        
+        (emitln "end")
+        
+        (emitln "local " mname " = {}")
+        (emitln "local " mname "__func = function (_, " (comma-sep
+                                                         (if variadic
+                                                           (concat (butlast params) ["..."])
+                                                           params)) ")")
+        (when gthis
+          (emitln "local " gthis " = " (munge (first params))))
+        (when variadic
+          (emitln "local " (last params) " = cljs.core.array_seq({...},0);"))
+        
+        (emitln "return " delegate-name "(" (comma-sep params) ")")
+        (emitln "end")
+        
+        (emitln mname ".cljs__lang__maxFixedArity = " max-fixed-arity)
+        (emits mname ".cljs__lang__applyTo = ")
+        (emit-apply-to (assoc f :name name))
+        (emitln "")
+        (emitln mname ".cljs__lang__arity__variadic = " delegate-name)
+        (emitln "setmetatable(" mname ", {['__call'] = " mname "__func })")
+        (emitln "return " mname)
+        (emitln "end)()"))))
+  ([mp] (emit-variadic-fn-method true mp)))
 
 (defmethod emit :fn
   [{:keys [name env methods max-fixed-arity variadic recur-frames loop-lets]}]
@@ -425,7 +428,12 @@
     (let [loop-locals (->> (concat (mapcat :names (filter #(and % @(:flag %)) recur-frames))
                                    (mapcat :names loop-lets))
                            (map munge)
-                           seq)]
+                           seq)
+          is-return (= :return (:context env))]
+      (when name
+        (when is-return (emits "return "))
+        (emitln "(function () ")
+        (emits "local " (munge name) ";" (munge name) " = "))
       (when loop-locals
         (when (= :return (:context env))
           (emits "return "))
@@ -434,8 +442,8 @@
           (emits "return ")))
       (if (= 1 (count methods))
         (if variadic
-          (emit-variadic-fn-method (assoc (first methods) :name name))
-          (emit-fn-method (assoc (first methods) :name name)))
+          (emit-variadic-fn-method (not name) (assoc (first methods) :name name))
+          (emit-fn-method (not name) (assoc (first methods) :name name)))
         (let [has-name? (and name true)
               name (or name (gensym))
               mname (munge name)
@@ -446,15 +454,15 @@
                              method])
                           methods))
               ms (sort-by #(-> % second :params count) (seq mmap))]
-          (when (= :return (:context env))
+          (when (and is-return (not has-name?))
             (emits "return "))
           (emitln "(function() ")
           (emitln "local " mname " = {};")
           (doseq [[n meth] ms]
             (emits "local " n " = ")
             (if (:variadic meth)
-              (emit-variadic-fn-method meth)
-              (emit-fn-method meth))
+              (emit-variadic-fn-method (not name) meth)
+              (emit-fn-method (not name) meth))
             (emitln ""))
             (emitln "local " mname "__func = function(_, ...)")
           (when variadic
@@ -495,7 +503,11 @@
           (emitln "return " mname)
           (emitln "end)()")))
       (when loop-locals
-        (emitln "end)(" (comma-sep loop-locals) "))")))))
+        (emitln "end)(" (comma-sep loop-locals) "))"))
+      (when name
+        (emitln "")
+        (emitln "return " (munge name))
+        (emits "end)()")))))
 
 (defmethod emit :do
   [{:keys [statements ret env]}]
@@ -733,4 +745,9 @@
 (defmacro lua [form]
   `(ana/with-core-macros "/cljs/lua/core"
      (binding [ana/*cljs-static-fns* true]
-       (emit (ana/analyze {:ns (@ana/namespaces 'cljs.user) :context :statement :locals {}} '~form)))))
+       (emit (ana/analyze {:ns (@ana/namespaces 'cljs.user) :context :return :locals {}} '~form)))))
+
+(defmacro pprint-form [form]
+  `(ana/with-core-macros "/cljs/lua/core"
+     (binding [ana/*cljs-static-fns* true]
+       (ppr/pprint (ana/analyze {:ns (@ana/namespaces 'cljs.user) :context :return :locals {}} '~form)))))

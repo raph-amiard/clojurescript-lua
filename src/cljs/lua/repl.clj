@@ -3,7 +3,8 @@
             [cljs.lua.compiler :as comp]
             [cljs.analyzer :as ana]
             [cljs.coreloader :as cloader]
-            [clojure.data.json :as json])
+            [clojure.data.json :as json]
+            [cljs.lua.common :as com])
   (:import  [java.io PrintWriter File FileInputStream FileOutputStream]))
 
 (def lua-interp "luajit-2.0.0-beta10")
@@ -12,26 +13,17 @@
 (def ^:dynamic *error-fatal?* false)
 (def next-core-form (atom 0))
 
-(def replace-forms {'(extend-type js/Date) nil                   
-                    '(extend-type array) '(deftype Array)
-                    '(set! js/String.prototype.apply) nil
-                    '(extend-type js/String) nil
-                    '(deftype Keyword) nil})
-
-(def core-forms-seq
-  (cloader/core-forms-seq (io/resource "core-lua.cljs")
-                          :extra-file-before (io/resource "core-lua-init.cljs")
-                          :replace-forms replace-forms))
-
-(defn new-env [] {:ns (@ana/namespaces ana/*cljs-ns*) :context :return :locals {}})
+(def nenv (partial com/new-env :return))
 
 (defn eval-core-forms [eval-fn n]
   (let [current-ns ana/*cljs-ns*]
-    (binding [*repl-verbose* false] (eval-fn (new-env) '(ns cljs.core)))
-    (doseq [form (take n (drop @next-core-form core-forms-seq))]
+    (binding [*repl-verbose* false] (eval-fn (nenv) '(ns cljs.core)))
+    (doseq [form (if (= n -1)
+                   com/core-forms-seq
+                   (take n (drop @next-core-form com/core-forms-seq)))]
       (println "eval form " (take 2 form) "...")
-      (eval-fn (new-env) form))
-    (binding [*repl-verbose* false] (eval-fn (new-env) (list 'ns current-ns)))
+      (eval-fn (nenv) form))
+    (binding [*repl-verbose* false] (eval-fn (nenv) (list 'ns current-ns)))
     (swap! next-core-form + n)))
 
 (def special-fns
@@ -98,18 +90,18 @@
           (println (.getCanonicalPath pipe-out)))
 
         ;; Eval core.cljs forms
-        (binding [*repl-verbose* false
+        (binding [*repl-verbose* true
                   *error-fatal?* true]
-          (eval-core-forms eval-form 406))
+          (eval-core-forms eval-form -1))
         
         ;; Eval common ns formo
-        (eval-form (new-env) '(ns cljs.user)) 
+        (eval-form (nenv) '(ns cljs.user)) 
         
         ;; Repl loop
         (while true
           (.print System/out (str ana/*cljs-ns* " > "))
           (.flush (System/out))
-          (let [env (new-env)
+          (let [env (nenv)
                 form (read)
                 special-fn? (and (seq? form) (contains? special-fns-set (first form)))]
             (if special-fn?

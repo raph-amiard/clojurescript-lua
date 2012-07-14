@@ -34,8 +34,31 @@
   (tassoc! [tcoll k v])  
   (twithout! [tcoll k])
   (tpersistent! [tcoll]))
-  
+
+(defprotocol IRBNode
+  (add-left [node ins])
+  (add-right [node ins])
+  (remove-left [node del])
+  (remove-right [node del])
+  (blacken [node])
+  (redden [node])
+  (balance-left [node parent])
+  (balance-right [node parent])
+  (nreplace [node key val left right])
+  (kv-reduce [node f init]))
+
+(defprotocol IPersistentTreeMap
+  (entry-at [coll k]))
+
 ;; default type
 (deftype default [])
 (defn default-proto-table [] (.-proto-methods cljs.core.default))
 (builtins/init-meta-tables)
+
+
+(def
+  ^{:doc "Each runtime environment provides a diffenent way to print output.
+  Whatever function *print-fn* is bound to will be passed any
+  Strings which should be printed."}
+  *print-fn*
+  lua/print)
