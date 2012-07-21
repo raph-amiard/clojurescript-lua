@@ -1,9 +1,6 @@
 #!/bin/bash
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-if [ "$CLOJURESCRIPT_HOME" = "" ]; then
-  CLOJURESCRIPT_HOME="`dirname $0`/."
-fi
 
 CLJSC_CP=''
 for next in $DIR/../cljs $DIR/../lib/* $DIR/../src $DIR/../libclojurescript.jar; do

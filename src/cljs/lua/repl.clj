@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [cljs.lua.compiler :as comp]
             [cljs.analyzer :as ana]
-            [cljs.coreloader :as cloader]
+            [cljs.cljsloader :as cloader]
             [clojure.data.json :as json]
             [cljs.lua.common :as com])
   (:import  [java.io PrintWriter File FileInputStream FileOutputStream]))

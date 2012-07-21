@@ -1,4 +1,4 @@
-(ns cljs.coreloader
+(ns cljs.cljsloader
   (:require [clojure.java.io :as io]))
 
 (defn read-or-nil [rdr]
