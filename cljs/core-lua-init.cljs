@@ -2,6 +2,11 @@
 
 (defprotocol Object (toString [x]))
 
+;; default type
+(deftype default [])
+(defn default-proto-table [] (.-proto-methods cljs.core.default))
+(builtins/init-meta-tables)
+
 (defprotocol IStringBuffer (append [x str]))
 
 (deftype StringBuffer []
@@ -49,16 +54,3 @@
 
 (defprotocol IPersistentTreeMap
   (entry-at [coll k]))
-
-;; default type
-(deftype default [])
-(defn default-proto-table [] (.-proto-methods cljs.core.default))
-(builtins/init-meta-tables)
-
-
-(def
-  ^{:doc "Each runtime environment provides a diffenent way to print output.
-  Whatever function *print-fn* is bound to will be passed any
-  Strings which should be printed."}
-  *print-fn*
-  lua/print)

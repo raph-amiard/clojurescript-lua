@@ -3,6 +3,7 @@ require("bit")
 builtins = {}
 basic_types_prot_functions = {}
 js = {}
+builtins.functions_metatable = nil
 
 function builtins.create_proto_table()
    local ptable = {}
@@ -29,10 +30,22 @@ end
 
 -- Metatables initialisation
 function builtins.init_meta_tables()
-   debug.setmetatable(0, {__index={proto_methods=builtins.create_proto_table()}})
-   debug.setmetatable(false, {__index={proto_methods=builtins.create_proto_table()}})
-   debug.setmetatable(nil, {__index={proto_methods=builtins.create_proto_table()}})
+   function newmt() 
+      return {__index={proto_methods=builtins.create_proto_table(), __call = builtins.IFnCall}}
+   end
+   debug.setmetatable(0, newmt())
+   debug.setmetatable(false, newmt())
+   debug.setmetatable(nil, newmt())
+   builtins.functions_metatable = newmt()
+   debug.setmetatable(function()end, builtins.functions_metatable)
    getmetatable("").__index.proto_methods=builtins.create_proto_table()
+   getmetatable("").__call = builtins.IFnCall
+end
+
+function builtins.create_func_object()
+   local o = {}
+   setmetatable(o, builtins.functions_metatable)
+   return o
 end
 
 tern_box_val = nil

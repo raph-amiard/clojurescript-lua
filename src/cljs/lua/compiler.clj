@@ -13,6 +13,7 @@
 (def ^:dynamic *emit-comments* false)
 (def ^:dynamic *def-name* nil)
 (def ^:dynamic *def-symbol* nil)
+(def ^:dynamic *ns-emit-require* true)
 
 (defn in-expr? [env]
   (= :expr (:context env)))
@@ -214,27 +215,27 @@
       (emits "cljs.core.ObjMap.EMPTY")
 
       (and simple-keys? (<= (count keys) obj-map-threshold))
-      (emits "cljs.core.ObjMap.fromObject({"
+      (emits "cljs.core.ObjMap.fromObject(builtins.array("
              (comma-sep keys) ; keys
-             "},{"
+             "),{"
              (comma-sep (map (fn [k v]
                                (with-out-str  (emits "[" k "]=" v)))
                              keys vals)) ; js obj
              "})")
 
       (<= (count keys) array-map-threshold)
-      (emits "cljs.core.PersistentArrayMap.fromArrays({"
+      (emits "cljs.core.PersistentArrayMap.fromArrays(builtins.array("
              (comma-sep keys)
-             "},{"
+             "),builtins.array("
              (comma-sep vals)
-             "})")
+             "))")
 
       :else
-      (emits "cljs.core.PersistentHashMap.fromArrays({"
+      (emits "cljs.core.PersistentHashMap.fromArrays(builtins.array("
              (comma-sep keys)
-             "},{"
+             "),builtins.array("
              (comma-sep vals)
-             "})"))))
+             "))"))))
 
 (defmethod emit :vector
   [{:keys [items env]}]
@@ -416,7 +417,7 @@
         (emit-apply-to (assoc f :name name))
         (emitln "")
         (emitln mname ".cljs__lang__arity__variadic = " delegate-name)
-        (emitln "setmetatable(" mname ", {['__call'] = " mname "__func })")
+        (emitln "setmetatable(" mname ", {__call = " mname "__func , __index = builtins.functions_metatable.__index})")
         (emitln "return " mname)
         (emitln "end)()"))))
   ([mp] (emit-variadic-fn-method true mp)))
@@ -702,7 +703,10 @@
     (emitln "-- @constructor")
     (emitln "--]]")
     (emitln (munge t) " = {}")
-    (emitln (munge t) ".proto_methods = {}")
+    (println "-- LOL : " (= (name t) "default") t)
+    (emitln (munge t) ".proto_methods = " (if (= (name t) "default")
+                                            "{}"
+                                            "builtins.create_proto_table()"))
     (emitln (munge t) ".new = (function (" (comma-sep fields) ")")
     (emitln "local instance = {}")
     (emitln "instance.proto_methods = " (munge t) ".proto_methods")
@@ -749,5 +753,6 @@
 
 (defmacro pprint-form [form]
   `(ana/with-core-macros "/cljs/lua/core"
-     (binding [ana/*cljs-static-fns* true]
+     (binding [ana/*cljs-static-fns* true
+               ana/*cljs-ns* 'cljs.user]
        (ppr/pprint (ana/analyze {:ns (@ana/namespaces 'cljs.user) :context :return :locals {}} '~form)))))

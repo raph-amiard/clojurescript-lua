@@ -739,8 +739,7 @@
   ISeqable
   (-seq [coll]
     (when (pos? (alength keys))
-      (map #(vector % (agetg strobj %))
-           (sort keys))))
+        (map #(vector % (agetg strobj %)) (sort keys))))
 
   ICounted
   (-count [coll] (alength keys))
@@ -2322,7 +2321,7 @@
         (table/insert tbl " "))
       (doseq [string (pr-seq obj opts)]
         (table/insert tbl string)))
-    (table/concat sb)))
+    (table/concat tbl)))
 
 (defn prn-str-with-opts
   "Same as pr-str-with-opts followed by (newline)"
@@ -2355,7 +2354,7 @@
                   (str nspc "/"))
                 (name obj)))
      :else (list (if (:readably opts)
-                   (goog.string.quote obj)
+                   obj
                    obj))))
 
   LazySeq
@@ -2443,4 +2442,30 @@
   Range
   (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll)))
 
+(def
+  ^{:doc "Each runtime environment provides a diffenent way to print output.
+  Whatever function *print-fn* is bound to will be passed any
+  Strings which should be printed."}
+  *print-fn*
+  io/write)
 
+(defn name
+  "Returns the name String of a string, symbol or keyword."
+  [x]
+  (cond
+    (string? x) x
+    (or (keyword? x) (symbol? x))
+    (let [i (string/find x "/")]
+      (if (nil? i)
+        (subs x 4)
+        (subs x i)))
+    :else (throw (js/Error. (str "Doesn't support name: " x)))))
+
+(defn namespace
+  "Returns the namespace String of a symbol or keyword, or nil if not present."
+  [x]
+  (if (or (keyword? x) (symbol? x))
+    (let [i (string/find x "/")]
+      (when-not (nil? i)
+        (subs x 4 (- i 1))))
+    (throw (js/Error. (str "Doesn't support namespace: " x)))))

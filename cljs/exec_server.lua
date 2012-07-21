@@ -17,6 +17,9 @@ actions = {
 	    resp.status = "OK"
 	 else
 	    resp.status = "ERROR"
+	    if type(result) == "table" then
+	       resp.body = result.message
+	    end
 	 end
       else
 	 resp.status = "ERROR"
