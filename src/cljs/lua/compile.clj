@@ -30,11 +30,11 @@
   (apply hash-map (mapcat (fn [f] [((ns-decl f) :name) f]) (cljs-files-in dir))))
 
 (defn compile-seq [seq]
-  (doseq [form seq] (comp/emit (ana/analyze (ana/empty-env) form))))
+  (doseq [form seq]
+    (comp/emit (ana/analyze (ana/empty-env) form))))
 
 (defn compile-file [file]
-  (compile-seq (cloader/make-forms-seq file)))
-    
+  (compile-seq (cloader/make-forms-seq file)))    
 
 (defn get-parent [file]
   (.getParentFile (io/file (.getCanonicalPath file))))
@@ -52,13 +52,18 @@
 
 (defn compile [file args]
   (let [nsd (ns-decl file)]
+    ;; Adding builtins
+    (println (slurp (io/resource "builtins.lua")))
+    ;; Adding core.cljs
     (compile-seq com/core-forms-seq)
+    ;; Compile main file and deps
     ((if nsd compile-root-file compile-file) file)))
 
 (defn -main [args]
   (ana/with-core-macros "/cljs/lua/core"
     (binding [ana/*cljs-ns* 'cljs.user
-              ana/*cljs-static-fns* true]
+              ana/*cljs-static-fns* true
+              comp/*ns-emit-require* false]
       (let [src-file (io/file (args :source))]
         (if (.isDirectory src-file)
           (println "Input must be a cljsc file !")

@@ -103,28 +103,28 @@
 (defmethod emit-constant Integer [x] (emits x)) ; reader puts Integers in metadata
 (defmethod emit-constant Double [x] (emits x))
 (defmethod emit-constant String [x]
-  (emits (wrap-in-double-quotes (escape-string x))))
+  (emits "(" (wrap-in-double-quotes (escape-string x)) ")"))
 (defmethod emit-constant Boolean [x] (emits (if x "true" "false")))
 (defmethod emit-constant Character [x]
   (emits (wrap-in-double-quotes (escape-char x))))
 
 (defmethod emit-constant java.util.regex.Pattern [x]
-  (let [[_ flags pattern] (re-find #"^(?:\(\?([idmsux]*)\))?(.*)" (str x))]
+  (let [[_ flags pattern] (re-find #"^(?:\(\?(x[idmsux]*)\))?(.*)" (str x))]
     (emits \/ (.replaceAll (re-matcher #"/" pattern) "\\\\/") \/ flags)))
 
 (defmethod emit-constant clojure.lang.Keyword [x]
-           (emits \" "\\239\\183\\144" \'
+           (emits "(" \" "\\239\\183\\144" \'
                   (if (namespace x)
                     (str (namespace x) "/") "")
                   (name x)
-                  \"))
+                  \" ")"))
 
 (defmethod emit-constant clojure.lang.Symbol [x]
-           (emits \" "\\239\\183\\145" \'
-                  (if (namespace x)
-                    (str (namespace x) "/") "")
-                  (name x)
-                  \"))
+  (emits "(" \" "\\239\\183\\145" \'
+         (if (namespace x)
+           (str (namespace x) "/") "")
+         (name x)
+         \" ")"))
 
 (defn- emit-meta-constant [x & body]
   (if (meta x)
@@ -151,9 +151,9 @@
 
 (defmethod emit-constant clojure.lang.IPersistentVector [x]
   (emit-meta-constant x
-    (concat ["cljs.core.vec(["]
+    (concat ["cljs.core.vec(builtins.array("]
             (comma-sep (map #(fn [] (emit-constant %)) x))
-            ["])"])))
+            ["))"])))
 
 (defmethod emit-constant clojure.lang.IPersistentMap [x]
   (emit-meta-constant x
@@ -164,9 +164,9 @@
 
 (defmethod emit-constant clojure.lang.PersistentHashSet [x]
   (emit-meta-constant x
-    (concat ["cljs.core.set({"]
+    (concat ["cljs.core.set(builtins.array("]
             (comma-sep (map #(fn [] (emit-constant %)) x))
-            ["})"])))
+            ["))"])))
 
 (defn emit-block
   [context statements ret]
@@ -245,12 +245,11 @@
       (emits "cljs.core.PersistentVector.fromArray({"
              (comma-sep items) "}, true)"))))
 
-
 (defmethod emit :set
   [{:keys [items env]}]
   (emit-wrap env
-    (emits "cljs.core.set({"
-           (comma-sep items) "})")))
+    (emits "cljs.core.set(builtins.array("
+           (comma-sep items) "))")))
 
 (defmethod emit :constant
   [{:keys [form env]}]
@@ -538,8 +537,9 @@
       
       ;; Try block
       (emitln success-sym ", " name " = pcall(function()")
-      (let [{:keys [statements ret]} try]
-        (emit-block subcontext statements ret))
+      (let [{:keys [statements ret]} try
+            newret (assoc-in ret [:env :context] :return)]
+        (emit-block subcontext statements newret))
       (emitln "end)")
       
       (binding [*finalizer* (if finally finally-sym nil)]
@@ -549,10 +549,10 @@
           (if (and name catch)
             (let [{:keys [statements ret]} catch]
               (emit-block subcontext statements ret))
-            (emitln finalize-call "; error(" name ")"))
+            (emitln finalize-call (when finalize-call ";") "error(" name ")"))
           (emitln "else")
           (emitln finalize-call)
-          (when (in-expr? env) (emitln "return " name))
+          (when (or (in-expr? env) (= :return context)) (emitln "return " name))
           (emitln "end")))
       
       (when (= :expr context) (emits "end)()"))))
@@ -692,8 +692,9 @@
   (emitln "builtins.create_namespace('" (munge name) "')")
   (comment (when-not (= name 'cljs.core)
              (emitln "require 'cljs.core'")))
-  (doseq [lib (into (vals requires) (distinct (vals uses)))]
-    (emitln "require '" (munge lib) "'")))
+  (when *ns-emit-require*
+    (doseq [lib (into (vals requires) (distinct (vals uses)))]
+      (emitln "require '" (munge lib) "'"))))
 
 (defmethod emit :deftype*
   [{:keys [t fields pmasks] :as info}]
@@ -703,7 +704,6 @@
     (emitln "-- @constructor")
     (emitln "--]]")
     (emitln (munge t) " = {}")
-    (println "-- LOL : " (= (name t) "default") t)
     (emitln (munge t) ".proto_methods = " (if (= (name t) "default")
                                             "{}"
                                             "builtins.create_proto_table()"))

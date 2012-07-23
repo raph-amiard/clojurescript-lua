@@ -780,7 +780,8 @@
   logical true."
   ([x]
      (when *assert*
-       `(when-not ~x
+       `(if ~x
+          (println "Assert pass : " (cljs.core/pr-str '~x))
           (throw (js/Error.
                   (cljs.core/str "Assert failed: " (cljs.core/pr-str '~x)))))))
   ([x message]

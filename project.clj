@@ -3,7 +3,7 @@
                  [org.clojure/data.json "0.1.2"]]
   :plugins [[lein-swank "1.4.0"]
             [lein-pprint "1.1.1"]]
-  :extra-classpath-dirs ["libclojurescript.jar"]
+  :extra-classpath-dirs ["libclojurescript.jar" "test/cljs"]
   :resources-path "cljs"
   :source-path "src"
   :main cljs.lua.compile
