@@ -242,8 +242,8 @@
   (emit-wrap env
     (if (empty? items)
       (emits "cljs.core.PersistentVector.EMPTY")
-      (emits "cljs.core.PersistentVector.fromArray({"
-             (comma-sep items) "}, true)"))))
+      (emits "cljs.core.PersistentVector.fromArray(builtins.array("
+             (comma-sep items) "), true)"))))
 
 (defmethod emit :set
   [{:keys [items env]}]
@@ -386,7 +386,7 @@
             params (map munge params)
             delegate-name (str mname "__delegate")]
         (emitln "(function () ")
-        (emitln "local " delegate-name " = function (" (comma-sep params) ")")
+        (emitln "local " delegate-name " = function (" (comma-sep params) ")")        
         (binding [*loop-var* (if recurs (gensym "loop_var_vfnm") *loop-var*)]
           (when recurs
             (emitln "local " *loop-var* " = true")
@@ -406,7 +406,7 @@
         (when gthis
           (emitln "local " gthis " = " (munge (first params))))
         (when variadic
-          (emitln "local " (last params) " = cljs.core.array_seq({...},0);"))
+          (emitln "local " (last params) " = cljs.core.array_seq(builtins.array(...),0);"))
         
         (emitln "return " delegate-name "(" (comma-sep params) ")")
         (emitln "end")
@@ -662,7 +662,7 @@
        (let [mfa (:max-fixed-arity variadic-invoke)]
         (emits f "(" (comma-sep (take mfa args))
                (when-not (zero? mfa) ",")
-               "cljs.core.array_seq({" (comma-sep (drop mfa args)) "}, 0))"))
+               "cljs.core.array_seq(builtins.array(" (comma-sep (drop mfa args)) "), 0))"))
        
        (or fn? lua?)
        (emits f "(" (comma-sep args)  ")")

@@ -105,14 +105,13 @@
 
 (defmacro aget
   ([a i]
-     (list 'js* "(~{}[~{}+1])" a i))
+     (list 'js* "(builtins.array_get(~{}, ~{}))" a i))
   ([a i & idxs]
-     (let [astr (apply core/str (repeat (count idxs) "[~{}+1]"))]
-      `(~'js* ~(core/str "(~{}[~{}+1]" astr ")") ~a ~i ~@idxs))))
+     (throw (Exception. "NIY"))))
 
 (defmacro aset [a i v]
   `(do
-     ~(list 'js* "~{}[~{}+1] = ~{}" a i v)
+     ~(list 'js* "builtins.array_set(~{}, ~{}, ~{})" a i v)
      nil))
 
 (defmacro agetg
@@ -890,7 +889,7 @@
                     (interpose ",")
                     (apply core/str))]
    (concat
-    (list 'js* (core/str "(builtins.array_init({" xs-str "}))"))
+    (list 'js* (core/str "(builtins.array_init({" xs-str "}, " (count rest) "))"))
     rest)))
 
 (defmacro js-obj [& rest]
@@ -899,11 +898,11 @@
                      (interpose ",")
                      (apply core/str))]
     (concat
-     (list 'js* (core/str "{" kvs-str "}"))
+     (list 'js* (core/str "({" kvs-str "})"))
      rest)))
 
 (defmacro alength [a]
-  (list 'js* "#(~{})" a))
+  (list 'js* "(~{}).length" a))
 
 (defmacro aclone [a]
   (list 'js* "builtins.array_copy(~{})" a))

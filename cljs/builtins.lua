@@ -27,12 +27,12 @@ function builtins.getnumberproto()
    return (0).proto_methods
 end
 
+function newmt() 
+   return {__index={proto_methods=builtins.create_proto_table(), __call = builtins.IFnCall}}
+end
 
 -- Metatables initialisation
 function builtins.init_meta_tables()
-   function newmt() 
-      return {__index={proto_methods=builtins.create_proto_table(), __call = builtins.IFnCall}}
-   end
    debug.setmetatable(0, newmt())
    debug.setmetatable(false, newmt())
    debug.setmetatable(nil, newmt())
@@ -40,6 +40,20 @@ function builtins.init_meta_tables()
    debug.setmetatable(function()end, builtins.functions_metatable)
    getmetatable("").__index.proto_methods=builtins.create_proto_table()
    getmetatable("").__call = builtins.IFnCall
+end
+
+function builtins.create_object(...)
+   local a = builtins.new_object()
+   for i=1,select("#", ...), 2 do
+      a[select(i, ...)] = select(i+1, ...)
+   end
+   return a
+end
+
+function builtins.new_object(...)
+   local t = {...}
+   setmetatable(t, newmt())
+   return t
 end
 
 function builtins.create_func_object()
@@ -77,22 +91,39 @@ function builtins.create_namespace(str)
 end
 
 function builtins.array_copy(t)
-   local t2 = {}
-   for k,v in pairs(t) do
-      t2[k] = v
-   end
+   local t2 = builtins.array(unpack(t))
    return t2
 end
 
 function builtins.array(...)
-   return builtins.array_init({...})
+   local t = {...}
+   return builtins.array_init(t, select("#", ...))
 end
 
-function builtins.array_init(arr)
+function builtins.array_init(arr, len)
    arr.proto_methods = cljs.core.Array.proto_methods
    arr.constructor = cljs.core.Array
+   arr.length = len
    setmetatable(arr, {__call=builtins.IFnCall})
    return arr
+end
+
+function builtins.array_len(arr)
+   return arr.length
+end
+
+function builtins.array_get(arr, idx)
+   return arr[idx+1]
+end
+
+function builtins.array_set(arr, idx, val)
+   arr[idx+1]=val
+   arr.length = math.max(arr.length, idx)
+end
+
+function builtins.array_insert(arr, val)
+   arr[arr.length+1]=val
+   arr.length = arr.length + 1
 end
 
 function builtins.type(x)
@@ -105,8 +136,8 @@ function builtins.type(x)
 end
 
 function builtins.keys (obj) 
-   local keys = {}
-   for k,v in pairs(obj) do table.insert(k) end
+   local keys = builtins.array()
+   for k,v in pairs(obj) do builtins.array_insert(keys, k) end
    return keys
 end
 

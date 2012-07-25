@@ -36,20 +36,20 @@
 
 (defn make-array
   ([size]
-     (array))
+     (builtins/array-init (js* "{}") size))
   ([type size]
      (make-array size)))
 
 (defn alength
   "Returns the length of the array. Works on arrays of all types."
   [array]
-  (lua-length array))
+  (cljs.core/alength array))
 
 (defn into-array
   ([aseq]
      (into-array nil aseq))
   ([type aseq]
-     (reduce (fn [a x] (table/insert a x) a) (array) aseq)))
+     (reduce (fn [a x] (builtins/array_insert a x) a) (array) aseq)))
 
 (def type builtins/type)
 
@@ -180,13 +180,13 @@
 
 (defn lua-obj
   ([]
-     (js* "{()}"))
-  ([& keyvals] (lua/error "Not implemented !")))
+     (builtins.new-object))
+  ([& keyvals] (apply builtins.create-object keyvals)))
 
 (defn js-obj
   ([]
-     (js* "({})"))
-  ([& keyvals] (lua/error "Not implemented !")))
+     (builtins.new-object))
+  ([& keyvals] (apply builtins.create-object keyvals)))
 
 (def js-keys builtins/keys)
 
@@ -395,7 +395,7 @@
   (let [ary (array)]
     (loop [s s]
       (if (seq s)
-        (do (table/insert ary (first s))
+        (do (builtins/array_insert ary (first s))
             (recur (next s)))
         ary))))
 
@@ -545,7 +545,7 @@
   (-conj [coll o]
     (if (< (- cnt (tail-off coll)) 32)
       (let [new-tail (aclone tail)]
-        (table/insert new-tail o)
+        (builtins/array_insert new-tail o)
         (PersistentVector. meta (inc cnt) shift root new-tail nil))
       (let [root-overflow? (> (bit-shift-right-zero-fill cnt 5) (bit-shift-left 1 shift))
             new-shift (if root-overflow? (+ shift 5) shift)
@@ -765,7 +765,7 @@
             (let [new-strobj (obj-clone strobj keys) ; append
                   new-keys (aclone keys)]
               (asetg new-strobj k v)
-              (table/insert new-keys k)
+              (builtins/array_insert new-keys k)
               (ObjMap. meta new-keys new-strobj (inc update-count) nil))))
         ;; non-string key. game over.
         (obj-map->hash-map coll k v)))
@@ -883,8 +883,8 @@
           (PersistentArrayMap. meta
                                (inc cnt)
                                (doto (aclone arr)
-                                 (table/insert k)
-                                 (table/insert v))
+                                 (builtins/array_insert k)
+                                 (builtins/array_insert v))
                                nil)
           (persistent!
            (assoc!
@@ -991,8 +991,8 @@
         (if (== idx -1)
           (if (<= (+ len 2) (* 2 cljs.core.PersistentArrayMap/HASHMAP_THRESHOLD))
             (do (set! len (+ len 2))
-                (table/insert arr key)
-                (table/insert arr val)
+                (builtins/array_insert arr key)
+                (builtins/array_insert arr val)
                 tcoll)
             (assoc! (array->transient-hash-map len arr) key val))
           (if (identical? val (aget arr (inc idx)))
@@ -1056,10 +1056,12 @@
 (deftype BitmapIndexedNode [edit ^:mutable bitmap ^:mutable arr]
   INode
   (inode-assoc [inode shift hash key val added-leaf?]
+    (println "BitmapIndexedNode assoc")
     (let [bit (bitpos hash shift)
           idx (bitmap-indexed-node-index bitmap bit)]
       (if (zero? (bit-and bitmap bit))
         (let [n (bit-count bitmap)]
+          (println "1")
           (if (>= n 16)
             (let [nodes (make-array 32)
                   jdx   (mask hash shift)]
@@ -1076,6 +1078,7 @@
                         (recur (inc i) (+ j 2))))))
               (ArrayNode. nil (inc n) nodes))
             (let [new-arr (make-array (* 2 (inc n)))]
+              (println "12")
               (array-copy arr 0 new-arr 0 (* 2 idx))
               (aset new-arr (* 2 idx) key)
               (aset new-arr (inc (* 2 idx)) val)
@@ -1254,6 +1257,7 @@
 (deftype ArrayNode [edit ^:mutable cnt ^:mutable arr]
   INode
   (inode-assoc [inode shift hash key val added-leaf?]
+    (println "ArrayNode assoc")    
     (let [idx  (mask hash shift)
           node (aget arr idx)]
       (if (nil? node)
@@ -1551,9 +1555,10 @@
 
   IMap
   (-dissoc [coll k]
-    (cond (nil? k)    (if has-nil?
-                        (PersistentHashMap. meta (dec cnt) root false nil nil)
-                        coll)
+    (cond (nil? k)
+          (if has-nil?
+            (PersistentHashMap. meta (dec cnt) root false nil nil)
+            coll)
           (nil? root) coll
           :else
           (let [new-root (inode-without root 0 (hash k) k)]
@@ -2190,7 +2195,7 @@
         obj (js-obj)]
     (loop [kvs (seq keyvals)]
       (if kvs
-        (do (table/insert ks (first kvs))
+        (do (builtins/array_insert ks (first kvs))
             (asetg obj (first kvs) (second kvs))
             (recur (nnext kvs)))
         (cljs.core.ObjMap/fromObject ks obj)))))
@@ -2315,19 +2320,19 @@
 
 (defn- pr-sb [objs opts]
   (let [first-obj (first objs)
-        tbl (js-obj)]
+        tbl (array)]
     (doseq [obj objs]
       (when-not (identical? obj first-obj)
-        (table/insert tbl " "))
+        (builtins/array_insert tbl " "))
       (doseq [string (pr-seq obj opts)]
-        (table/insert tbl string)))
+        (builtins/array_insert tbl string)))
     (table/concat tbl)))
 
 (defn prn-str-with-opts
   "Same as pr-str-with-opts followed by (newline)"
   [objs opts]
   (let [sb (pr-sb objs opts)]
-    (table/insert sb \newline)
+    (builtins/array_insert sb \newline)
     (str sb)))
 
 (extend-protocol IPrintable
@@ -2469,3 +2474,12 @@
       (when-not (nil? i)
         (subs x 4 (- i 1))))
     (throw (js/Error. (str "Doesn't support namespace: " x)))))
+
+(defn hash-map
+  "keyval => key val
+  Returns a new hash map with supplied mappings."
+  [& keyvals]
+  (loop [in (seq keyvals), out (transient cljs.core.PersistentHashMap/EMPTY)]
+    (if in
+      (recur (nnext in) (assoc! out (first in) (second in)))
+      (persistent! out))))

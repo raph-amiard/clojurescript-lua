@@ -79,7 +79,7 @@
                                   (println "ERROR : " (:body resp))
                                   (when *error-fatal?*
                                     (println lua-code)
-                                    (.exit System))))))))]
+                                    )))))))]
 
         ;; Wait for exec server to be ready
          (.start (Thread. (fn [] (while true (let [l (.readLine rdr)] (when l (println l)))))))
