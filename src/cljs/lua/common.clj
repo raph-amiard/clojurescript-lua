@@ -14,6 +14,7 @@
 (def core-forms-seq
   (cloader/core-forms-seq (io/resource "core-lua.cljs")
                           :extra-file-before (io/resource "core-lua-init.cljs")
+                          :extra-file-after (io/resource "core-lua-extra.cljs")
                           :replace-forms replace-forms))
 
  	  	

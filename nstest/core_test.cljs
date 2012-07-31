@@ -210,7 +210,7 @@
   (assert (= {"x" "y"} (meta ^{"x" "y"} [])))
   (assert (= {:a :b} (dissoc {:a :b :c :d} :c)))
   (assert (= (hash-map :foo 5)
-             (assoc (cljs.core.ObjMap. nil (array) (js-obj)) :foo 5)))
+             (assoc (cljs.core.ObjMap. nil (array) (js-obj) 0 0) :foo 5)))
 
   (assert (= "\"asdf\"" (pr-str "asdf")))
 
@@ -298,6 +298,7 @@
               (false? true)
               (true? js/undefined)
               (false? js/undefined)]))
+
   ;; apply
   (assert (= 0 (apply + nil)))
   (assert (= 0 (apply + (list))))
@@ -308,7 +309,7 @@
   (assert (= 31 (apply + 1 2 4 8 (list 16))))
   (assert (= 63 (apply + 1 2 4 8 16 (list 32))))
   (assert (= 127 (apply + 1 2 4 8 16 (list 32 64))))
-  (assert (= 4950 (apply + (take 100 (iterate inc 0)))))
+  #_(assert (= 4950 (apply + (take 100 (iterate inc 0)))))
   (assert (= () (apply list [])))
   (assert (= [1 2 3] (apply list [1 2 3])))
   (assert (= 6 (apply apply [+ [1 2 3]])))
@@ -324,6 +325,7 @@
   (assert (= [3 4 5 6 7] (take 5 (apply (fn [x y z & m] m) (iterate inc 0)))))
   (assert (= [4 5 6 7 8] (take 5 (apply (fn [x y z a & m] m) (iterate inc 0)))))
   (assert (= [5 6 7 8 9] (take 5 (apply (fn [x y z a b & m] m) (iterate inc 0)))))
+
   ;; apply arity tests
   (let [single-arity-non-variadic (fn [x y z] [z y x])
         multiple-arity-non-variadic (fn ([x] x) ([x y] [y x]) ([x y z] [z y x]))
@@ -362,6 +364,7 @@
     (assert (= [[3 4 5] 2 1] (apply multiple-arity-variadic 1 2 3 4 [5])))
     (assert (= [3 4 5] (take 3 (first (apply multiple-arity-variadic (iterate inc 1))))))
     (assert (= [2 1] (rest (apply multiple-arity-variadic (iterate inc 1))))))
+  
   (let [a (atom 0)]
     (assert (= 0 (deref a)))
     (assert (= 1 (swap! a inc)))
@@ -369,24 +372,28 @@
     (assert (= true (compare-and-set! a 1 7)))
     (assert (nil? (meta a)))
     (assert (nil? (get-validator a))))
+  
   (let [a (atom 0)]
     (assert (= 1 (swap! a + 1)))
     (assert (= 4 (swap! a + 1 2)))
     (assert (= 10 (swap! a + 1 2 3)))
     (assert (= 20 (swap! a + 1 2 3 4))))
+  
   (let [a (atom [1] :validator coll? :meta {:a 1})]
     (assert (= coll? (get-validator a)))
     (assert (= {:a 1} (meta a)))
     (alter-meta! a assoc :b 2)
     (assert (= {:a 1 :b 2} (meta a))))
+  
   (assert (nil? (empty nil)))
+
   (let [e-lazy-seq (empty (with-meta (lazy-seq (cons :a nil)) {:b :c}))]
     (assert (seq? e-lazy-seq))
     (assert (empty? e-lazy-seq))
-    (assert (= {:b :c} (meta e-lazy-seq))))
+    (assert (= {:b :c} (meta e-lazy-seq))))  
   (let [e-list (empty '^{:b :c} (1 2 3))]
     (assert (seq? e-list))
-    (assert (empty? e-list)))
+    (assert (empty? e-list)))  
   (let [e-elist (empty '^{:b :c} ())]
     (assert (seq? e-elist))
     (assert (empty? e-elist))
@@ -454,6 +461,7 @@
     (assert (= 121 (a21 100)))
     (assert (= 122 (a22 100)))
     (assert (= 123 (a23 100))))
+
   (let [n2 (comp first rest)
         n3 (comp first rest rest)
         n4 (comp first rest rest rest)
@@ -464,6 +472,7 @@
     (assert (= 4 (n4 [1 2 3 4 5 6 7])))
     (assert (= 5 (n5 [1 2 3 4 5 6 7])))
     (assert (= 6 (n6 [1 2 3 4 5 6 7]))))
+
   (let [sf (some-fn number? keyword? symbol?)]
     (assert (sf :foo 1))
     (assert (sf :foo))
@@ -600,15 +609,15 @@
     (assert (= [10 20 30] (seq (amap a i ret (* 10 (aget a i))))))
     (assert (= 6 (areduce a i ret 0 (+ ret (aget a i)))))
     (assert (= (seq a) (seq (to-array [1 2 3]))))
-    (assert (= 42 (aset a 0 42)))
+    (aset a 0 42)
     (assert (not= (seq a) (seq (to-array [1 2 3]))))
     (assert (not= a (aclone a))))
 
-  (let [a (array (array 1 2 3) (array 4 5 6))]
-    (assert (= (aget a 0 1) 2))
-    (assert (= (apply aget a [0 1]) 2))
-    (assert (= (aget a 1 1) 5))
-    (assert (= (apply aget a [1 1]) 5)))
+  #_(let [a (array (array 1 2 3) (array 4 5 6))]
+      (assert (= (aget a 0 1) 2))
+      (assert (= (apply aget a [0 1]) 2))
+      (assert (= (aget a 1 1) 5))
+      (assert (= (apply aget a [1 1]) 5)))
 
   ;; sort
   (assert (= [1 2 3 4 5] (sort [5 3 1 4 2])))
@@ -1234,17 +1243,18 @@
       (assert (= (rseq s2) (list 1 2 3)))
       (assert (= (count s1) 3))
       (assert (= (count s2) 3))
+
       (let [s1 (disj s1 2)
             s2 (disj s2 2)]
-        (assert (= (seq s1)  (list 1 3)))
-        (assert (= (rseq s1) (list 3 1)))
-        (assert (= (seq s2)  (list 3 1)))
-        (assert (= (rseq s2) (list 1 3)))
-        (assert (= (count s1) 2))
-        (assert (= (count s2) 2)))))
+           (assert (= (seq s1)  (list 1 3)))
+           (assert (= (rseq s1) (list 3 1)))
+           (assert (= (seq s2)  (list 3 1)))
+           (assert (= (rseq s2) (list 1 3)))
+           (assert (= (count s1) 2))
+           (assert (= (count s2) 2)))))
 
   ;; defrecord
-#_(  (defrecord Person [firstname lastname])
+  (defrecord Person [firstname lastname])
   (def fred (Person. "Fred" "Mertz"))
   (assert (= (:firstname fred) "Fred"))
   (def fred-too (Person. "Fred" "Mertz"))
@@ -1266,7 +1276,7 @@
   (defrecord A [])
   (assert (= {:foo 'bar} (meta (with-meta (A.) {:foo 'bar}))))
   (assert (= 'bar (:foo (assoc (A.) :foo 'bar))))
-)
+
   ;; ObjMap
   (let [ks (map (partial str "foo") (range 500))
         m  (apply obj-map (interleave ks (range 500)))]
@@ -1275,7 +1285,7 @@
     (assert (= 123 (m "foo123"))))
 
   ;; dot
-  (let [s "abc"]
+#_(  (let [s "abc"]
     (assert (= 3 (.-length s)))
     (assert (= 3 (. s -length)))
     (assert (= 3 (. (str 138) -length)))
@@ -1291,7 +1301,7 @@
     (assert (= "ABC" (. "abc" (toUpperCase))))
     (assert (= "ABC" ((memfn toUpperCase) s)))
     (assert (= "BC" (. (. s (toUpperCase)) substring 1)))
-    (assert (= 2 (.-length (. (. s (toUpperCase)) substring 1)))))
+    (assert (= 2 (.-length (. (. s (toUpperCase)) substring 1))))))
 
   (assert (= (conj fred {:wife :ethel :friend :ricky})
              (map->Person {:firstname "Fred" :lastname "Mertz" :wife :ethel :friend :ricky})))
@@ -1304,13 +1314,13 @@
   (assert (= (dissoc ethel :husband)
              (map->Person {:firstname "Ethel" :lastname "Mertz"})))
 
-#_(  (defrecord A [x])
+  (defrecord A [x])
   (defrecord B [x])
   (assert (not= (A. nil) (B. nil)))
 
   (defprotocol IFoo (foo [this]))
   (assert (= (meta (with-meta (reify IFoo (foo [this] :foo)) {:foo :bar}))
-             {:foo :bar})))
+             {:foo :bar}))
 
   (defmulti foo2 identity)
   (defmethod foo2 0 [x] x)

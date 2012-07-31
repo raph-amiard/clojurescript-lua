@@ -202,7 +202,7 @@
   ([x y & more] `(math/min ~x ~y ~@more)))
 
 (defmacro mod [num div]
-  (list 'js* "(~{} % ~{})" num div))
+  (list 'js* "(math.fmod(~{}, ~{}))" num div))
 
 (defmacro bit-not [x]
   (list 'js* "(bit.bnot(~{}))" x))
@@ -386,16 +386,18 @@
         skip-flag (set (-> tsym meta :skip-protocol-flag))
         base-type (base-type tsym)
         t (if base-type tsym (resolve tsym))
+        tstr (if (= 'nil tsym) "nil" tsym)
         prototype-prefix (fn [sym]
                            `(.. ~@(if base-type
-                                   `((~(symbol (clojure.core/str "builtins/get" (if (= 'nil tsym) "nil" tsym) "proto"))))
+                                   `((~(symbol (clojure.core/str "builtins/get" tstr "proto"))))
                                    `(~tsym -proto_methods)) ~(to-property sym)))
         
         assign-impls (fn [[p sigs]]
                        (warn-if-not-protocol p)
                        (let [psym (resolve p)
                              pprefix (protocol-prefix psym)]
-                         (concat [`(asetg ~psym ~(if base-type (clojure.core/str tsym) t) true)]
+                         (concat [`(asetg ~psym ~(if base-type
+                                                   (clojure.core/str tstr) t) true)]
                                  (when-not (skip-flag psym)
                                    [`(set! ~(prototype-prefix pprefix) true)])
                                  (mapcat (fn [[f & meths :as form]]                                               
@@ -583,7 +585,7 @@
        (set! (.-cljs__lang__ctorPrSeq ~r) (fn [this#] (list ~(core/str r))))
        ~(build-positional-factory rsym r fields)
        ~(build-map-factory rsym r fields)
-       ~r)))
+       )))
 
 (defmacro not-primitive? [o]
   `(and (identical? (lua/type ~o) "table") (not (identical? (builtins/type ~o) "table"))))
@@ -996,9 +998,10 @@
                prefer-table# (atom {})
                method-cache# (atom {})
                cached-hierarchy# (atom {})
-               hierarchy# (get ~options :hierarchy cljs.core/global-hierarchy)]
-           (cljs.core/MultiFn. ~(name mm-name) ~dispatch-fn ~default hierarchy#
-                               method-table# prefer-table# method-cache# cached-hierarchy#))))))
+               hierarchy# (get ~options :hierarchy cljs.core/global-hierarchy)
+               mfn# (cljs.core/MultiFn. ~(name mm-name) ~dispatch-fn ~default hierarchy# method-table# prefer-table# method-cache# cached-hierarchy#)]
+           (lua/setmetatable mfn# (js-obj "__call" builtins/mfn-call))
+           mfn#)))))
 
 (defmacro defmethod
   "Creates and installs a new method of multimethod associated with dispatch-value. "
@@ -1069,3 +1072,9 @@
 (defmacro kw-or-sym? [x]
   `(and (identical? (string/byte ~x 1) 239)
         (identical? (string/byte ~x 2) 183)))
+
+(defmacro length-op [a]  
+  (list 'js* "#(~{})" a))
+
+(defmacro type? [a]
+  `(boolean (.-cljs__lang__type ~a)))

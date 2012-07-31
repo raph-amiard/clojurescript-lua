@@ -58,9 +58,12 @@
 
 (extend-type default
   IHash
-  (-hash [o] (lua/tonumber (string/sub (lua/tostring o) 10) 16))
+  (-hash [o]
+    (lua/tonumber (string/sub (lua/tostring o) 10) 16))
   Object
-  (toString [o] (lua/tostring o)))
+  (toString [o] (lua/tostring o))
+  IEquiv
+  (-equiv [a b] (identical? a b)))
 
 (deftype IndexedSeq [a i]
   
@@ -174,9 +177,11 @@
 (defn hash
   ([o] (hash o true))
   ([o ^boolean check-cache]
-     (if (and ^boolean (identical? (lua/type o) "string") check-cache)
-       (check-string-hash-cache o)
-       (-hash o))))
+     (if (type? o)
+       (lua/tonumber (string/sub (lua/tostring o) 10) 16)
+       (if (and ^boolean (identical? (lua/type o) "string") check-cache)
+         (check-string-hash-cache o)
+         (-hash o)))))
 
 (defn lua-obj
   ([]
@@ -280,6 +285,11 @@
     (builtins/shuffle a)
     (vec a)))
 
+(defn rand
+  "Returns a random floating point number between 0 (inclusive) and n (default 1) (exclusive)."
+  ([]  (math/random))
+  ([n] (* n (rand))))
+
 (defn- str*
   "Internal - do not use!"
   ([] "")
@@ -291,7 +301,7 @@
         (if more
           (recur (append sb (str* (first more))) (next more))
           (str* sb)))
-      (append (StringBuffer.) (str* x)) ys)))
+      (append (string-buffer) (str* x)) ys)))
 
 
 (defn str
@@ -299,7 +309,8 @@
   x.toString().  (str nil) returns the empty string. With more than
   one arg, returns the concatenation of the str values of the args."
   ([] "")
-  ([x] (cond
+  ([x]
+     (cond
         (symbol? x) (string/sub x 5)
         (keyword? x) (str* ":" (string/sub x 5))
         (nil? x) ""
@@ -309,7 +320,7 @@
         (if more
           (recur (append sb (str (first more))) (next more))
           (str* sb)))
-      (append (StringBuffer.) (str x)) ys)))
+      (append (string-buffer) (str x)) ys)))
 
 
 (defn subs
@@ -346,14 +357,15 @@
   ASeq
   ISeq
   (-first [s] (string/sub s 1 1))
-  (-rest [s] (string/sub s 2))
+  (-rest [s] (let [a (string/sub s 2)]
+               (if (identical? a "") nil a)))
 
   INext
   (-next [s] (let [a (string/sub s 2)]
                (if (identical? a "") nil a)))
 
   ICounted
-  (-count [s] (alength s))
+  (-count [s] (length-op s))
 
   IIndexed
   (-nth
@@ -389,6 +401,7 @@
     ([this coll not-found]
        (get coll (toString this) not-found))))
 
+
 (defn to-array
   "Naive impl of to-array as a start."
   [s]
@@ -399,7 +412,6 @@
             (recur (next s)))
         ary))))
 
-
 (defn- fix [q]
   (if (>= q 0)
     (math/floor q)
@@ -409,16 +421,46 @@
   "Applies fn f to the argument list formed by prepending intervening arguments to args.
   First cut.  Not lazy.  Needs to use emitted toApply."
   ([f args]
-     (f (lua/unpack (to-array args))))
+     (let [fixed-arity (.-cljs__lang__maxFixedArity f)]
+       (if (.-cljs__lang__applyTo f)
+         (let [bc (bounded-count args (inc fixed-arity))]
+          (if (<= bc fixed-arity)
+            (f (builtins/unpack (to-array args)))
+            (.cljs__lang__applyTo f args)))
+         (f (builtins/unpack (to-array args))))))
   ([f x args]
-     (f x (lua/unpack (to-array args))))
+     (let [fixed-arity (.-cljs__lang__maxFixedArity f)]
+       (if (.-cljs__lang__applyTo f)
+         (let [bc (+ (bounded-count args (inc fixed-arity)) 1)]
+          (if (<= bc fixed-arity)
+            (f x (builtins/unpack (to-array args)))
+            (.cljs__lang__applyTo f (cons x args))))
+         (f x (builtins/unpack (to-array args))))))
   ([f x y args]
-     (f x y (lua/unpack (to-array args))))
+     (let [fixed-arity (.-cljs__lang__maxFixedArity f)]
+       (if (.-cljs__lang__applyTo f)
+         (let [bc (+ (bounded-count args (inc fixed-arity)) 2)]
+          (if (<= bc fixed-arity)
+            (f x y (builtins/unpack (to-array args)))
+            (.cljs__lang__applyTo f (cons x (cons y args)))))
+         (f x y (builtins/unpack (to-array args))))))
   ([f x y z args]
-     (f x y z (lua/unpack (to-array args))))
+     (let [fixed-arity (.-cljs__lang__maxFixedArity f)]
+       (if (.-cljs__lang__applyTo f)
+         (let [bc (bounded-count arglist (inc fixed-arity))]
+          (if (<= bc fixed-arity)
+            (f x y z (builtins/unpack (to-array args)))
+            (.cljs__lang__applyTo f (cons x (cons y (cons z args))))))
+         (f x y z (builtins/unpack (to-array args))))))
   ([f a b c d & args]
-     (let [arglist (cons a (cons b (cons c (cons d (spread args)))))]
-       (f x y z (lua/unpack (to-array arglist))))))
+     (let [arglist (cons a (cons b (cons c (cons d (spread args)))))
+           fixed-arity (.-cljs__lang__maxFixedArity f)]
+       (if (.-cljs__lang__applyTo f)
+         (let [bc (bounded-count arglist (inc fixed-arity))]
+           (if (<= bc fixed-arity)
+             (f (builtins/unpack (to-array args)))
+             (.cljs__lang__applyTo f arglist)))
+         (f (builtins/unpack (to-array args)))))))
 
 
 ;;; Vector
@@ -527,12 +569,13 @@
   (-peek [coll]
     (when (> cnt 0)
       (-nth coll (dec cnt))))
+  
   (-pop [coll]
     (cond
      (zero? cnt) (throw (js/Error. "Can't pop empty vector"))
      (== 1 cnt) (-with-meta cljs.core.PersistentVector/EMPTY meta)
      (< 1 (- cnt (tail-off coll)))
-      (PersistentVector. meta (dec cnt) shift root (table/slice tail 1 -2) nil)
+      (PersistentVector. meta (dec cnt) shift root (builtins/array-slice tail 1 -2) nil)
       :else (let [new-tail (array-for coll (- cnt 2))
                   nr (pop-tail coll shift root)
                   new-root (if (nil? nr) cljs.core.PersistentVector/EMPTY_NODE nr)
@@ -658,7 +701,7 @@
               xs (if (identical? no-clone true) xs (aclone xs))]
           (if (< l 32)
             (PersistentVector. nil l 5 cljs.core.PersistentVector/EMPTY_NODE xs nil)
-            (let [node (table/slice xs 1 32)
+            (let [node (builtins/array-slice xs 1 32)
                   v (PersistentVector. nil 32 5 cljs.core.PersistentVector/EMPTY_NODE node nil)]
              (loop [i 32 out (-as-transient v)]
                (if (< i l)
@@ -693,7 +736,7 @@
     (loop [i   0
            out (transient out)]
       (if (< i len)
-        (let [k (agetg ks i)]
+        (let [k (aget ks i)]
           (recur (inc i) (assoc! out k (agetg so k))))
         (persistent! (assoc! out k v))))))
 
@@ -781,7 +824,7 @@
              (not (nil? (scan-array 1 k keys))))
       (let [new-keys (aclone keys)
             new-strobj (obj-clone strobj keys)]
-        (table/remove new-keys (inc (scan-array 1 k new-keys)))
+        (builtins/array-remove new-keys (inc (scan-array 1 k new-keys)))
         (js-delete new-strobj k)
         (ObjMap. meta new-keys new-strobj (inc update-count) nil))
       coll)) ; key not found, return coll unchanged
@@ -1008,8 +1051,8 @@
         (when (>= idx 0)
           (aset arr idx (aget arr (- len 2)))
           (aset arr (inc idx) (aget arr (dec len)))
-          (table/remove arr)
-          (table/remove arr)
+          (builtins/array-remove arr)
+          (builtins/array-remove arr)
           (set! len (- len 2)))
         tcoll)
       (throw (js/Error. "dissoc! after persistent!")))))
@@ -1075,12 +1118,10 @@
 (deftype BitmapIndexedNode [edit ^:mutable bitmap ^:mutable arr]
   INode
   (inode-assoc [inode shift hash key val added-leaf?]
-    (println "BitmapIndexedNode assoc")
     (let [bit (bitpos hash shift)
           idx (bitmap-indexed-node-index bitmap bit)]
       (if (zero? (bit-and bitmap bit))
         (let [n (bit-count bitmap)]
-          (println "1")
           (if (>= n 16)
             (let [nodes (make-array 32)
                   jdx   (mask hash shift)]
@@ -1097,7 +1138,6 @@
                         (recur (inc i) (+ j 2))))))
               (ArrayNode. nil (inc n) nodes))
             (let [new-arr (make-array (* 2 (inc n)))]
-              (println "12")
               (array-copy arr 0 new-arr 0 (* 2 idx))
               (aset new-arr (* 2 idx) key)
               (aset new-arr (inc (* 2 idx)) val)
@@ -1250,7 +1290,7 @@
                         (== bitmap bit) nil
                         :else (edit-and-remove-pair inode edit bit idx)))
                 (key-test key key-or-nil)
-                (do (aset removed-leaf? 0 true)
+                (do (set! (.-val removed-leaf?) true)
                     (edit-and-remove-pair inode edit bit idx))
                 :else inode)))))
 
@@ -1276,7 +1316,6 @@
 (deftype ArrayNode [edit ^:mutable cnt ^:mutable arr]
   INode
   (inode-assoc [inode shift hash key val added-leaf?]
-    (println "ArrayNode assoc")    
     (let [idx  (mask hash shift)
           node (aget arr idx)]
       (if (nil? node)
@@ -1447,7 +1486,7 @@
     (let [idx (hash-collision-node-find-index arr cnt key)]
       (if (== idx -1)
         inode
-        (do (aset removed-leaf? 0 true)
+        (do (set! (.-val removed-leaf?) true)
             (if (== cnt 1)
               nil
               (let [editable (ensure-editable inode edit)
@@ -1672,7 +1711,7 @@
             (if (identical? node root)
               nil
               (set! root node))
-            (if (aget removed-leaf? 0)
+            (if (.-val removed-leaf?)
               (set! count (dec count)))
             tcoll)))
       (throw (js/Error. "dissoc! after persistent!"))))
@@ -1811,10 +1850,10 @@
 
   IRBNode
   (add-left [node ins]
-    (balance-left ins node))
+    (-balance-left ins node))
 
   (add-right [node ins]
-    (balance-right ins node))
+    (-balance-right ins node))
 
   (remove-left [node del]
     (balance-left-del key val del right))
@@ -1826,10 +1865,10 @@
 
   (redden [node] (RedNode. key val left right nil))
 
-  (balance-left [node parent]
+  (-balance-left [node parent]
     (BlackNode. (.-key parent) (.-val parent) node (.-right parent) nil))
 
-  (balance-right [node parent]
+  (-balance-right [node parent]
     (BlackNode. (.-key parent) (.-val parent) (.-left parent) node nil))
 
   (nreplace [node key val left right]
@@ -1935,7 +1974,7 @@
   (redden [node]
     (throw (js/Error. "red-black tree invariant violation")))
 
-  (balance-left [node parent]
+  (-balance-left [node parent]
     (cond
       (instance? RedNode left)
       (RedNode. key val
@@ -1955,7 +1994,7 @@
       :else
       (BlackNode. (.-key parent) (.-val parent) node (.-right parent) nil)))
 
-  (balance-right [node parent]
+  (-balance-right [node parent]
     (cond
       (instance? RedNode right)
       (RedNode. key val
@@ -2082,6 +2121,63 @@
     (cond (zero? c) (nreplace tree tk v (.-left tree) (.-right tree))
           (neg? c)  (nreplace tree tk (.-val tree) (tree-map-replace comp (.-left tree) k v) (.-right tree))
           :else     (nreplace tree tk (.-val tree) (.-left tree) (tree-map-replace comp (.-right tree) k v)))))
+
+
+(deftype PersistentHashSet [meta hash-map ^:mutable __hash]
+  Object
+  (toString [this]
+    (pr-str this))
+  
+  IWithMeta
+  (-with-meta [coll meta] (PersistentHashSet. meta hash-map __hash))
+
+  IMeta
+  (-meta [coll] meta)
+
+  ICollection
+  (-conj [coll o]
+    (PersistentHashSet. meta (assoc hash-map o 1) nil))
+
+  IEmptyableCollection
+  (-empty [coll] (with-meta cljs.core.PersistentHashSet/EMPTY meta))
+
+  IEquiv
+  (-equiv [coll other]
+    (and
+     (set? other)
+     (== (count coll) (count other))
+     (every? #(contains? coll %)
+             other)))
+
+  IHash
+  (-hash [coll] (caching-hash coll hash-iset __hash))
+
+  ISeqable
+  (-seq [coll] (keys hash-map))
+
+  ICounted
+  (-count [coll] (count (seq coll)))
+
+  ILookup
+  (-lookup [coll v]
+    (-lookup coll v nil))
+  (-lookup [coll v not-found]
+    (if (-contains-key? hash-map v)
+      v
+      not-found))
+
+  ISet
+  (-disjoin [coll v]
+    (PersistentHashSet. meta (dissoc hash-map v) nil))
+
+  IFn
+  (-invoke [coll k]
+    (-lookup coll k))
+  (-invoke [coll k not-found]
+    (-lookup coll k not-found))
+
+  IEditableCollection
+  (-as-transient [coll] (TransientHashSet. (transient hash-map))))
 
 
 (deftype PersistentTreeMap [comp tree cnt meta ^:mutable __hash]
@@ -2339,19 +2435,19 @@
 
 (defn- pr-sb [objs opts]
   (let [first-obj (first objs)
-        tbl (array)]
+        sb (string-buffer)]
     (doseq [obj objs]
       (when-not (identical? obj first-obj)
-        (builtins/array_insert tbl " "))
+        (append sb " "))
       (doseq [string (pr-seq obj opts)]
-        (builtins/array_insert tbl string)))
-    (table/concat tbl)))
+        (append sb string)))
+    sb))
 
 (defn prn-str-with-opts
   "Same as pr-str-with-opts followed by (newline)"
   [objs opts]
   (let [sb (pr-sb objs opts)]
-    (builtins/array_insert sb \newline)
+    (append sb \newline)
     (str sb)))
 
 (extend-protocol IPrintable
@@ -2378,7 +2474,7 @@
                   (str nspc "/"))
                 (name obj)))
      :else (list (if (:readably opts)
-                   obj
+                   (json/encode obj)
                    obj))))
 
   LazySeq
@@ -2466,6 +2562,17 @@
   Range
   (-pr-seq [coll opts] (pr-sequential pr-seq "(" " " ")" opts coll)))
 
+
+(defn range
+  "Returns a lazy seq of nums from start (inclusive) to end
+   (exclusive), by step, where start defaults to 0, step to 1,
+   and end to infinity."
+  ([] (range 0 (/ 1 0) 1))
+  ([end] (range 0 end 1))
+  ([start end] (range start end 1))
+  ([start end step] (Range. nil start end step nil)))
+
+
 (def
   ^{:doc "Each runtime environment provides a diffenent way to print output.
   Whatever function *print-fn* is bound to will be passed any
@@ -2479,19 +2586,14 @@
   (cond
     (string? x) x
     (or (keyword? x) (symbol? x))
-    (let [i (string/find x "/")]
-      (if (nil? i)
-        (subs x 4)
-        (subs x i)))
+    (if (string/find x "/") ((string/gmatch (subs x 4) ".*/(.+)")) (subs x 4))
     :else (throw (js/Error. (str "Doesn't support name: " x)))))
 
 (defn namespace
   "Returns the namespace String of a symbol or keyword, or nil if not present."
   [x]
   (if (or (keyword? x) (symbol? x))
-    (let [i (string/find x "/")]
-      (when-not (nil? i)
-        (subs x 4 (- i 1))))
+    ((string/gmatch (str x) "(.*)/.+"))
     (throw (js/Error. (str "Doesn't support namespace: " x)))))
 
 (defn hash-map
@@ -2502,3 +2604,26 @@
     (if in
       (recur (nnext in) (assoc! out (first in) (second in)))
       (persistent! out))))
+
+(extend-type boolean
+  IHash
+  (-hash [o]
+    (if (identical? o true) 1 0))
+
+  IEquiv
+  (-equiv [b o] (identical? b o)))
+
+
+(defn distinct
+  "Returns a lazy sequence of the elements of coll with duplicates removed"
+  [coll]
+  (let [step (fn step [xs seen]
+               (lazy-seq
+                ((fn [[f :as xs] seen]
+                   (when-let [s (seq xs)]
+                     (if (contains? seen f)
+                       (recur (next s) seen)
+                       (cons f (step (next s) (conj seen f))))))
+                 xs seen)))]
+    (step coll #{})))
+

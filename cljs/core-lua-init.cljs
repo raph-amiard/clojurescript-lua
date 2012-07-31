@@ -13,7 +13,12 @@
   Object
   (toString [x] (table/concat x))
   IStringBuffer
-  (append [x str] (table/insert x str) x))
+  (append [x str] (builtins/array-insert x str) x))
+
+(defn string-buffer []
+  (let [sb (StringBuffer.)]
+    (set! (.-length sb) 0)
+    sb))
 
 (defn pr-str [] "NIY")
 
@@ -47,10 +52,13 @@
   (remove-right [node del])
   (blacken [node])
   (redden [node])
-  (balance-left [node parent])
-  (balance-right [node parent])
+  (-balance-left [node parent])
+  (-balance-right [node parent])
   (nreplace [node key val left right])
   (kv-reduce [node f init]))
 
 (defprotocol IPersistentTreeMap
   (entry-at [coll k]))
+
+(defprotocol IString
+  (find-last [str substr]))

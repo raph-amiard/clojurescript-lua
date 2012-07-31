@@ -361,7 +361,7 @@
   ([emit-wrap? {:keys [gthis name variadic params statements ret env recurs max-fixed-arity]}]
      (when-emit-wrap
       emit-wrap? env
-      (binding [*loop-var* (if recurs (gensym "loop_var_fnm") *loop-var*)]
+      (binding [*loop-var* (if recurs (gensym "loop_var_fnm") *loop-var*)]        
         (emitln "(function (" (comma-sep (map munge params)) ")")
         (when gthis
           (emitln "local " gthis " = " (munge (first params))))
@@ -458,19 +458,20 @@
             (emits "return "))
           (emitln "(function() ")
           (emitln "local " mname " = {};")
+          
           (doseq [[n meth] ms]
             (emits "local " n " = ")
             (if (:variadic meth)
               (emit-variadic-fn-method (not name) meth)
               (emit-fn-method (not name) meth))
             (emitln ""))
-            (emitln "local " mname "__func = function(_, ...)")
+          (emitln "local " mname "__func = function(_, ...)")
           (when variadic
             (emitln "local " (last maxparams) " = var_args;"))
-
+          
           (let [args-num (gensym "args_num")
                 dispatch-cond (fn [n meth]
-                                  (str args-num " == " (count (:params meth))))
+                                (str args-num " == " (count (:params meth))))
                 call-meth (fn [n meth] (emitln "return " n "(...)"))]
             
             (emitln "local " args-num " = select('#', ...)")
@@ -497,7 +498,7 @@
                   (emitln mname ".cljs__lang__arity__variadic = " n ".cljs__lang__arity__variadic")
                   (emitln mname ".cljs__lang__arity__" c " = " n)))))
           
-          (emitln "local __metatable = {['__call']= " mname "__func}")
+          (emitln "local __metatable = {__call= " mname "__func, __index = builtins.functions_metatable.__index}")
           (emitln "setmetatable(" mname ", __metatable)")
 
           (emitln "return " mname)
@@ -596,7 +597,7 @@
     (when (= :expr context) (emitln "end)()"))))
 
 (defn protocol-prefix [psym]
-  (str (-> (str psym) (.replaceAll "\\." "__") (.replaceAll "/" "__")) "__"))
+  (str (-> (str psym) (.replaceAll "-" "_") (.replaceAll "\\." "__") (.replaceAll "/" "__")) "__"))
 
 (defmethod emit :invoke
   [{:keys [f args env] :as expr}]
@@ -722,11 +723,18 @@
 (defmethod emit :defrecord*
   [{:keys [t fields pmasks]}]
   (let [fields (concat (map munge fields) '[__meta __extmap])]
-    (emitln (munge t) " = (function (" (comma-sep fields) ")")
+    (emitln (munge t) " = {}")
+    (emitln (munge t) ".proto_methods = builtins.create_proto_table()")
+    (emitln (munge t) ".new = (function (" (comma-sep fields) ")")
+    (emitln "local instance = {}")
+    (emitln "instance.proto_methods = " (munge t) ".proto_methods")
+    (emitln "instance.constructor = " (munge t))
     (doseq [fld fields]
-      (emitln "this." fld " = " fld ";"))
+      (emitln "instance." fld " = " fld ";"))
     (doseq [[pno pmask] pmasks]
-      (emitln "this.cljs__lang__protocol_mask__partition" pno "__ = " pmask))
+      (emitln "instance.cljs__lang__protocol_mask__partition" pno "__ = " pmask))
+    (emitln "setmetatable(instance, builtins.type_instance_mt)")
+    (emitln "return instance")
     (emitln "end)")))
 
 (defmethod emit :dot

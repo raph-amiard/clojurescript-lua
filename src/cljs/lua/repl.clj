@@ -90,7 +90,7 @@
           (println (.getCanonicalPath pipe-out)))
 
         ;; Eval core.cljs forms
-        (binding [*repl-verbose* true
+        (binding [*repl-verbose* false
                   *error-fatal?* true]
           (eval-core-forms eval-form -1))
         
