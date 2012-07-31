@@ -1,0 +1,7 @@
+#! /bin/bash
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+$DIR/../bin/cljsc $DIR/../test/core_test.cljs > out.lua
+lua out.lua
+rm out.lua
