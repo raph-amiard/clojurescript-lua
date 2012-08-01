@@ -1,25 +1,36 @@
 Clojurescript-Lua
 -----------------
 
-Welcome, this is the repository for the version of clojurescript which will, soon, be running on Lua :)
+Welcome, ClojureScript/Lua is a lisp language targeting Lua. It is using the ClojureScript compiler, and provides a different backend and ecosystem for the ClojureScript language.
 
-It is also a proof of concept of the fact that you can now use the clojurescript analyzer as a library !
+The current version of ClojureScript/Lua is 0.1.0-ALPHA. It is in alpha stage, hence the name, and you should expect that a lot of things are not working yet !
 
-You can already test out things by following the getting started guide
+ClojureScript/Lua should run on any posix system that has bash, lua and java installed.
+
+If you find any bug, don't hesitate to submit issues on github, especially if Cljs/Lua doesn't work at all on your computer, and you find a fix :)
+
+Here is hello world in Cljs/Lua :
+
+~~~clojure
+(println "Hello, world !")
+~~~
+
+Distinctive traits of ClojureScript are :
+
+- Lisp language (s-expression syntax, code is data, etc)
+- Functional (mostly)
+- Functional data structures with literal syntax 
+
+~~~clojure
+(def my-map {:john "doe" :jack "daniels"})
+(println (my-map :john)) ;; prints "doe"
+~~~
 
 ### Getting started
 
-You need to have leiningen installed. This is the only prerequisite (with of course java & all)
-
-~~~sh
-$ git clone https://github.com/raph-amiard/clojurescript-lua.git
-$ cd clojurescript-lua
-$ script/init.sh
-~~~
+You need to have leiningen installed. This is the only prerequisite (with of course java & all). After that, you just need to grab yourself a copy of the repo, either via cloning it or downloading an archive.
 
 ### Running the Cljs/Lua repl
-
-Cljs/Lua has no full fledged compiler at the moment, just a REPL, because that's all i need for testing. Since i'm quite close to having the full thing running, the compiler should follow quite shortly !
 
 To run the repl, you need to have Lua 5.1 installed, as well as a few dependencies:
 
@@ -28,19 +39,13 @@ To run the repl, you need to have Lua 5.1 installed, as well as a few dependenci
 
 The two are quite standard lua libs that should be available in your distribution's repositories.
 
-The repl will spawn a lua subprocess from java, and interact with it via json chunks on named pipes. That means that *for the moment the repl will only run on posix systems*. You won't know if the lua side is running properly by running the repl because errors are not yet properly redirected, so to make sure everything is working properly, you can run the following command :
+To run the REPL, issue the following command
 
 ~~~sh
-lua cljs/exec_server.lua
+./cljslua repl
 ~~~
 
-If there are no errors, and the process is just hanging there, it is that everything is fine. You can then run the repl :
-
-~~~sh
-script/repl
-~~~
-
-I will make the process more robust in time !
+On the first run, Cljs/Lua will install some components that it needs.
 
 #### REPL options
 
@@ -53,8 +58,22 @@ By default, the repl shows the output of compiled Cljs commands. You can switch 
 You can also switch off execution by calling
 
 ~~~clojure
-(switch-exec
+(switch-exec)
 ~~~
+
+### Cljs/Lua compiler
+
+Cljs/Lua has a **very** basic compiler that works the following way
+
+~~~sh
+./cljslua compile <in-file> <out-file>
+~~~
+
+1. You give it a in-file and an out-file.
+2. It will compile *everything* to the out-file. That means, the content of the core library, of the compiled file, and of any dependencies.
+3. It will search for required namespaces in subdirectories of the directory containing the in-file. File layout doesn't matter for the moment.
+
+This is very basic, but yet functionnal. The compiler will be redesigned soon, but some thoughts need to be given to the general design of it first.
 
 ### Running the lein repl
 
