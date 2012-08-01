@@ -80,8 +80,14 @@
                                     (println lua-code)
                                     )))))))]
 
-        ;; Wait for exec server to be ready
-         (.start (Thread. (fn [] (while true (let [l (.readLine rdr)] (when l (println l)))))))
+        ;; Redirect everything from subprocess stdout to own stdout
+        (.start (Thread. (fn [] (while true (let [l (.readLine rdr)] (when l (println l)))))))
+
+        (try (do
+               (.exitValue lua-process)
+               (println "Lua subprocess has exited prematurely, verify you have lua installed, and required libraries : lua-json and lua-bitops")
+               (System/exit 0))
+             (catch Exception e))
 
         ;; Send it the two pipes names
         (binding [*out* (PrintWriter. (.getOutputStream lua-process))]
@@ -94,8 +100,8 @@
                   *error-fatal?* true]
           (eval-core-forms eval-form -1))
         
-        ;; Eval common ns formo
-        (eval-form (nenv) '(ns cljs.user)) 
+        ;; Eval common ns forms
+        (eval-form (nenv) '(ns cljs.user))
         
         ;; Repl loop
         (while true
