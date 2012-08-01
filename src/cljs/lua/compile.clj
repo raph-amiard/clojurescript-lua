@@ -50,7 +50,7 @@
   (binding [*cljs-files* (make-files-map (get-parent file))]
     (compile-with-deps file)))
 
-(defn compile [file args]
+(defn -compile [file args]
   (let [nsd (ns-decl file)]
     ;; Adding builtins
     (println (slurp (io/resource "builtins.lua")))
@@ -64,7 +64,7 @@
     (binding [ana/*cljs-ns* 'cljs.user
               ana/*cljs-static-fns* true
               comp/*ns-emit-require* false]
-      (let [src-file (io/file (args :source))]
+      (let [src-file (io/file (first args))]
         (if (.isDirectory src-file)
           (println "Input must be a cljsc file !")
-          (compile src-file args))))))
+          (-compile src-file args))))))

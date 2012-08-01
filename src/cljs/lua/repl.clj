@@ -42,7 +42,7 @@
     (File. pipe-path)))
 
 
-(defn -main []  
+(defn -main [args]
   (ana/with-core-macros "/cljs/lua/core"
     (println "Cljs/Lua repl")    
     (binding [ana/*cljs-ns* 'cljs.user

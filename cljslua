@@ -1,0 +1,27 @@
+#! /bin/bash
+
+DIR="$( cd "$( dirname "$0" )" && pwd )" 
+
+CLJSC_CP=''
+for next in $DIR/cljs $DIR/lib/* $DIR/src $DIR/libclojurescript.jar; do
+    CLJSC_CP=$CLJSC_CP:$next
+done
+
+if command -v rlwrap >/dev/null 2>&1; then
+    JCMD="rlwrap java"
+else
+    JCMD="java"
+fi
+
+if [ ! -f "$DIR/.install" ]; then
+    echo "Installing necessary components for cljs-lua"
+    $DIR/script/init.sh
+    touch $DIR/.install
+fi
+
+if test $# -eq 0
+then
+    echo "Usage: cljslua <command> args"
+else
+    $JCMD -server -cp $CLJSC_CP clojure.main $DIR/bin/cljslua.clj $*
+fi
