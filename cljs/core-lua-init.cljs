@@ -20,8 +20,6 @@
     (set! (.-length sb) 0)
     sb))
 
-(defn pr-str [] "NIY")
-
 (defprotocol INode
   (inode-assoc [inode shift hash key val added-leaf?])
   (inode-without [inode shift hash key])

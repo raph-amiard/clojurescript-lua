@@ -10,6 +10,7 @@
 (def lua-interp "lua")
 (def ^:dynamic *repl-verbose* true)
 (def ^:dynamic *repl-exec* true)
+(def ^:dynamic *repl-show-result* true)
 (def ^:dynamic *error-fatal?* false)
 (def next-core-form (atom 0))
 
@@ -21,7 +22,6 @@
     (doseq [form (if (= n -1)
                    com/core-forms-seq
                    (take n (drop @next-core-form com/core-forms-seq)))]
-      (println "eval form " (take 2 form) "...")
       (eval-fn (nenv) form))
     (binding [*repl-verbose* false] (eval-fn (nenv) (list 'ns current-ns)))
     (swap! next-core-form + n)))
@@ -41,13 +41,12 @@
     (.waitFor (.exec (Runtime/getRuntime) (str "mkfifo " pipe-path)))
     (File. pipe-path)))
 
-
 (defn -main [args]
   (ana/with-core-macros "/cljs/lua/core"
     (println "Cljs/Lua repl")    
     (binding [ana/*cljs-ns* 'cljs.user
               ana/*cljs-static-fns* true
-              *repl-verbose* true
+              *repl-verbose* false
               *repl-exec* true]      
       (let [;; Lua subprocess
             pb (ProcessBuilder. [lua-interp "cljs/exec_server.lua"])
@@ -74,7 +73,7 @@
                               (println (json/json-str {:action :exec :body lua-code})))
                             (let [resp (json/read-json (.readLine @pipe-rdr))]
                               (if (= (:status resp) "OK")
-                                (println (:body resp))
+                                (when *repl-show-result* (println (:body resp)))
                                 (do
                                   (println "ERROR : " (:body resp))
                                   (when *error-fatal?*
@@ -91,6 +90,7 @@
 
         ;; Eval core.cljs forms
         (binding [*repl-verbose* false
+                  *repl-show-result* false
                   *error-fatal?* true]
           (eval-core-forms eval-form -1))
         
