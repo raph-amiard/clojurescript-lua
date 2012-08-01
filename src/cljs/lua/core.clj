@@ -1078,3 +1078,24 @@
 
 (defmacro type? [a]
   `(boolean (.-cljs__lang__type ~a)))
+
+
+(defmacro defnative [t fields & impls]
+  (let [r (:name (cljs.analyzer/resolve-var (dissoc &env :locals) t))
+        [fpps pmasks] (prepare-protocol-masks &env t impls)
+        protocols (collect-protocols impls &env)
+        t (vary-meta t assoc
+            :protocols protocols
+            :skip-protocol-flag fpps) ]
+    (if (seq impls)
+      `(do
+         (deftype* ~t ~fields ~pmasks)
+         (set! (.-cljs__lang__type ~t) true)
+         (set! (.-cljs__lang__ctorPrSeq ~t) (fn [this#] (list ~(core/str r))))
+         (extend-type ~t ~@(dt->et impls fields true))
+         nil)
+      `(do
+         (deftype* ~t ~fields ~pmasks)
+         (set! (.-cljs__lang__type ~t) true)
+         (set! (.-cljs__lang__ctorPrSeq ~t) (fn [this#] (list ~(core/str r))))
+         nil))))
