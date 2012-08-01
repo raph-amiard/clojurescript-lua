@@ -67,4 +67,5 @@
       (let [src-file (io/file (first args))]
         (if (.isDirectory src-file)
           (println "Input must be a cljsc file !")
-          (-compile src-file args))))))
+          (binding [*out* (if (second args) (io/writer (second args)) *out*)]
+            (-compile src-file args)))))))
