@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="Clojurescript-lua : Clojurescript running on lua ! In construction" />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Clojurescript-lua</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/raph-amiard/clojurescript-lua">View on GitHub</a>
+
+          <h1 id="project_title">Clojurescript-lua</h1>
+          <h2 id="project_tagline">Clojurescript running on lua ! In construction</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/raph-amiard/clojurescript-lua/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/raph-amiard/clojurescript-lua/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h2>Clojurescript-Lua</h2>
+
+<p>Welcome, ClojureScript/Lua is a lisp language targeting Lua. It is using the ClojureScript compiler, and provides a different backend and ecosystem for the ClojureScript language.</p>
+
+<p>The current version of ClojureScript/Lua is 0.1.0-ALPHA. It is in alpha stage, hence the name, and you should expect that a lot of things are not working yet !</p>
+
+<p>ClojureScript/Lua should run on any posix system that has bash, lua and java installed.</p>
+
+<p>If you find any bug, don't hesitate to submit issues on github, especially if Cljs/Lua doesn't work at all on your computer, and you find a fix :)</p>
+
+<p>Here is hello world in Cljs/Lua :</p>
+
+<div class="highlight"><pre><span class="p">(</span><span class="nb">println </span><span class="s">"Hello, world !"</span><span class="p">)</span>
+</pre></div>
+
+<p>Distinctive traits of ClojureScript are :</p>
+
+<ul>
+<li>Lisp language (s-expression syntax, code is data, etc)</li>
+<li>Functional (mostly)</li>
+<li>Functional data structures with literal syntax </li>
+</ul><div class="highlight"><pre><span class="p">(</span><span class="k">def </span><span class="nv">my-map</span> <span class="p">{</span><span class="ss">:john</span> <span class="s">"doe"</span> <span class="ss">:jack</span> <span class="s">"daniels"</span><span class="p">})</span>
+<span class="p">(</span><span class="nb">println </span><span class="p">(</span><span class="nf">my-map</span> <span class="ss">:john</span><span class="p">))</span> <span class="c1">;; prints "doe"</span>
+</pre></div>
+
+<h3>Getting started</h3>
+
+<p>You need to have leiningen installed. This is the only prerequisite (with of course java &amp; all). After that, you just need to grab yourself a copy of the repo, either via cloning it or downloading an archive.</p>
+
+<h3>Running the Cljs/Lua repl</h3>
+
+<p>To run the repl, you need to have Lua 5.1 installed, as well as a few dependencies:</p>
+
+<ul>
+<li>lua json library</li>
+<li>lua bit ops library</li>
+</ul><p>The two are quite standard lua libs that should be available in your distribution's repositories.</p>
+
+<p>To run the REPL, issue the following command</p>
+
+<div class="highlight"><pre>./cljslua repl
+</pre></div>
+
+<p>On the first run, Cljs/Lua will install some components that it needs.</p>
+
+<h4>REPL options</h4>
+
+<p>By default, the repl shows the output of compiled Cljs commands. You can switch that off by calling the function</p>
+
+<div class="highlight"><pre><span class="p">(</span><span class="nf">switch-verbose</span><span class="p">)</span>
+</pre></div>
+
+<p>You can also switch off execution by calling</p>
+
+<div class="highlight"><pre><span class="p">(</span><span class="nf">switch-exec</span><span class="p">)</span>
+</pre></div>
+
+<h3>Cljs/Lua compiler</h3>
+
+<p>Cljs/Lua has a <strong>very</strong> basic compiler that works the following way</p>
+
+<div class="highlight"><pre>./cljslua compile &lt;in-file&gt; &lt;out-file&gt;
+</pre></div>
+
+<ol>
+<li>You give it a in-file and an out-file.</li>
+<li>It will compile <em>everything</em> to the out-file. That means, the content of the core library, of the compiled file, and of any dependencies.</li>
+<li>It will search for required namespaces in subdirectories of the directory containing the in-file. File layout doesn't matter for the moment.</li>
+</ol><p>This is very basic, but yet functionnal. The compiler will be redesigned soon, but some thoughts need to be given to the general design of it first.</p>
+
+<h3>Running the lein repl</h3>
+
+<p>If you want to see how the compiler compiles out snippets of clojurescript :</p>
+
+<div class="highlight"><pre><span class="nv">$ </span>lein repl
+</pre></div>
+
+<div class="highlight"><pre><span class="nv">REPL</span> <span class="nv">started</span><span class="c1">; server listening on localhost port 31236</span>
+<span class="nv">cljs.lua.compiler=&gt;</span> <span class="p">(</span><span class="nf">lua</span> <span class="p">(</span><span class="kd">defn </span><span class="nv">add</span> <span class="p">[</span><span class="nv">a</span> <span class="nv">b</span><span class="p">]</span> <span class="p">(</span><span class="nb">+ </span><span class="nv">a</span> <span class="nv">b</span><span class="p">)))</span>
+<span class="s">"cljs.user.add = (function (a,b)</span>
+<span class="s">return (a + b)</span>
+<span class="s">end)"</span>
+<span class="nv">nil</span>
+</pre></div>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Clojurescript-lua maintained by <a href="https://github.com/raph-amiard">raph-amiard</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
