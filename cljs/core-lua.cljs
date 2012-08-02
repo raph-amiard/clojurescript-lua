@@ -2432,12 +2432,11 @@
             (cond
              ;; handle CLJS ctors
              (and (not (nil? obj))
+                  (not (cdata? obj))
                   ^boolean (.-cljs__lang__type obj))
              (.cljs__lang__ctorPrSeq obj obj)
 
              (satisfies? IPrintable obj) (-pr-seq obj opts)
-
-             (regexp? obj) (list "#\"" (.-source obj) "\"")
 
              :else (list "#<" (str obj) ">")))))
 
@@ -2634,4 +2633,3 @@
                        (cons f (step (next s) (conj seen f))))))
                  xs seen)))]
     (step coll #{})))
-

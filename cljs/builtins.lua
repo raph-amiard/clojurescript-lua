@@ -41,7 +41,7 @@ function builtins.getnumberproto()
 end
 
 function newmt() 
-   return {__index={proto_methods=builtins.create_proto_table(), __call = builtins.IFnCall}}
+   return {__index={proto_methods=builtins.create_proto_table()}, __call = builtins.IFnCall}
 end
 
 -- Metatables initialisation
@@ -49,6 +49,7 @@ function builtins.init_meta_tables()
    debug.setmetatable(0, newmt())
    debug.setmetatable(false, newmt())
    debug.setmetatable(nil, newmt())
+   getmetatable(nil).__call = nil
    builtins.functions_metatable = newmt()
    debug.setmetatable(function()end, builtins.functions_metatable)
    getmetatable("").__index.proto_methods=builtins.create_proto_table()
@@ -151,6 +152,8 @@ function builtins.type(x)
    local t = type(x)
    if t == "table" then
       return x.constructor or "table"
+   elseif t == "cdata" then
+      return x.constructor or "cdata"
    else
       return t
    end
@@ -347,3 +350,7 @@ builtins.__unpack[21] = function (t)
 end
 
 builtins.type_instance_mt = {__call = builtins.IFnCall }
+
+function builtins.require_ffi()
+   ffi = require("ffi")
+end

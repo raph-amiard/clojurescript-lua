@@ -77,7 +77,7 @@
   (vary-meta e assoc :tag 'boolean))
 
 (defmacro nil? [x]
-  `(coercive-= ~x nil))
+  `(coercive-= (lua/type ~x) "nil"))
 
 ;; internal - do not use.
 (defmacro coercive-not [x]
@@ -1079,6 +1079,14 @@
 (defmacro type? [a]
   `(boolean (.-cljs__lang__type ~a)))
 
+(defn make-C-struct-from-fields [typename fields]
+  (clojure.core/let [fields-map (clojure.core/apply clojure.core/hash-map fields)]
+    (clojure.core/str "typedef struct { "
+         (clojure.core/apply clojure.core/str (clojure.core/for [[name type] fields-map] (clojure.core/str type " " name "; ")))
+         "} " typename)))
+
+(defn make-param-vect [fields]
+  (clojure.core/vec (clojure.core/for [i (clojure.core/remove clojure.core/odd? (clojure.core/range (clojure.core/count fields)))] (fields i))))
 
 (defmacro defnative [t fields & impls]
   (let [r (:name (cljs.analyzer/resolve-var (dissoc &env :locals) t))
@@ -1086,16 +1094,41 @@
         protocols (collect-protocols impls &env)
         t (vary-meta t assoc
             :protocols protocols
-            :skip-protocol-flag fpps) ]
+            :skip-protocol-flag fpps)
+        tname (munge t)]
     (if (seq impls)
       `(do
-         (deftype* ~t ~fields ~pmasks)
+         (builtins/require-ffi)
+         (def ~t (js-obj))
+         (ffi/cdef ~(make-C-struct-from-fields tname fields))
+         (set! (.-proto-methods ~t) (builtins/create-proto-table))
+         (set! (.--mt ~t) (js-obj "__index" (js-obj "proto_methods" (.-proto-methods ~t)
+                                                    "constructor" ~t)))
+                                  "__call" builtins/IFnCall))
+         (asetg (.. ~t --mt -__index) "constructor" ~t)
+         (set! (.-c-cons ~t) (ffi/metatype ~(clojure.core/str tname) (.--mt ~t)))
+         (set! (.-new ~t) (fn ~(make-param-vect fields)
+                            (let [inst# (.c-cons ~t ~@(make-param-vect fields))]
+                              inst#)))
          (set! (.-cljs__lang__type ~t) true)
          (set! (.-cljs__lang__ctorPrSeq ~t) (fn [this#] (list ~(core/str r))))
          (extend-type ~t ~@(dt->et impls fields true))
          nil)
       `(do
-         (deftype* ~t ~fields ~pmasks)
-         (set! (.-cljs__lang__type ~t) true)
+         (builtins/require-ffi)
+         (def ~t (js-obj))
+         (ffi/cdef ~(make-C-struct-from-fields tname fields))
+         (set! (.-proto-methods ~t) (builtins/create-proto-table))
+         (set! (.--mt ~t) (js-obj "__index" (js-obj "proto_methods" (.-proto-methods ~t))
+                                  "__call" builtins/IFnCall))
+         (asetg (.. ~t --mt -__index) "constructor" ~t)
+         (set! (.-c-cons ~t) (ffi/metatype ~(clojure.core/str tname) (.--mt ~t)))
+         (set! (.-new ~t) (fn ~(make-param-vect fields)
+                            (let [inst# (.c-cons ~t ~@(make-param-vect fields))]
+                              inst#)))
+         (set! (.. ~t -m-cljs__lang__type ~t) true)
          (set! (.-cljs__lang__ctorPrSeq ~t) (fn [this#] (list ~(core/str r))))
          nil))))
+
+(defmacro cdata? [obj]
+  `(identical? (lua/type ~obj) "cdata"))
