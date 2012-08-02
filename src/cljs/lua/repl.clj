@@ -12,10 +12,11 @@
             [cljs.analyzer :as ana]
             [cljs.cljsloader :as cloader]
             [clojure.data.json :as json]
-            [cljs.lua.common :as com])
+            [cljs.lua.common :as com]
+            [cljs.lua.config :as conf])
   (:import  [java.io PrintWriter File FileInputStream FileOutputStream]))
 
-(def lua-interp "lua")
+(def ^:dynamic *lua-interp* nil)
 (def ^:dynamic *repl-verbose* true)
 (def ^:dynamic *repl-exec* true)
 (def ^:dynamic *repl-show-result* true)
@@ -55,9 +56,10 @@
     (binding [ana/*cljs-ns* 'cljs.user
               ana/*cljs-static-fns* true
               *repl-verbose* false
-              *repl-exec* true]      
+              *repl-exec* true
+              *lua-interp* (conf/get :repl :lua-runtime)]
       (let [;; Lua subprocess
-            pb (ProcessBuilder. [lua-interp "cljs/exec_server.lua"])
+            pb (ProcessBuilder. [*lua-interp* "cljs/exec_server.lua"])
             lua-process (.start pb)
             
             ;; Read lua stdout
