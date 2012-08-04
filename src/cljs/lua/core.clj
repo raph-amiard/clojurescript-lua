@@ -1103,7 +1103,7 @@
          (ffi/cdef ~(make-C-struct-from-fields tname fields))
          (set! (.-proto-methods ~t) (builtins/create-proto-table))
          (set! (.--mt ~t) (js-obj "__index" (js-obj "proto_methods" (.-proto-methods ~t)
-                                                    "constructor" ~t)))
+                                                    "constructor" ~t)
                                   "__call" builtins/IFnCall))
          (asetg (.. ~t --mt -__index) "constructor" ~t)
          (set! (.-c-cons ~t) (ffi/metatype ~(clojure.core/str tname) (.--mt ~t)))
@@ -1132,3 +1132,9 @@
 
 (defmacro cdata? [obj]
   `(identical? (lua/type ~obj) "cdata"))
+
+(defmacro cdef [def-string]
+  `(ffi/cdef ~def-string))
+
+(defmacro ccall [fn-name & args]
+  `(.. ffi/C (~fn-name ~@args)))
