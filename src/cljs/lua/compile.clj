@@ -16,13 +16,27 @@
 
 (def ^:dynamic *cljs-files*)
 
-(defn cljs-files-in
-  "Return a sequence of all .cljs files in the given directory."
-  [dir]
+(defn files-in
+  "Return a sequence of all files with given extension in the given directory."
+  [ext dir]
   (filter #(let [name (.getName ^java.io.File %)]
-             (and (.endsWith name ".cljs")
+             (and (.endsWith name (str "." ext))
                   (not= \. (first name))))
           (file-seq dir)))
+
+(def cljs-files-in
+  (partial files-in "cljs"))
+
+(defn lib-ns [lib-file]
+  (let [first-line (binding [*in* (clojure.java.io/reader lib-file)]
+                     (read-line))]
+    (if (.startsWith first-line "-- CLJS/LUA")
+      (symbol (nth (.split first-line " ") 3)))))
+
+(def lib-files-map
+  (apply hash-map
+         (mapcat (fn [f] [(lib-ns f) f])
+                 (files-in "cljlib" (io/file (com/common-libs-path))))))
 
 (defn ns-decl [file]
   (let [first-form
@@ -41,39 +55,61 @@
   (doseq [form seq]
     (comp/emit (ana/analyze (ana/empty-env) form))))
 
-(defn compile-file [file]
-  (compile-seq (cloader/make-forms-seq file)))    
+(defn compile-file [file optmap]
+  (compile-seq (cloader/make-forms-seq file)))
 
 (defn get-parent [file]
   (.getParentFile (io/file (.getCanonicalPath file))))
 
-(defn compile-with-deps [file]
+(defn compile-with-deps [file optmap]
   (let [nsdecl (ns-decl file)
         requires (nsdecl :requires)]
     (doseq [[ns-alias ns-name] requires]
-      (compile-with-deps (*cljs-files* ns-name)))
-    (compile-file file)))
+      (if (*cljs-files* ns-name)
+        (compile-with-deps (*cljs-files* ns-name) optmap)
+        (if (lib-files-map ns-name)
+          (println (slurp (lib-files-map ns-name)))
+          (throw (Exception. (str "Dependency not found : " ns-name "!"))))))
+    (compile-file file optmap)))
 
-(defn compile-root-file [file]
+(defn compile-root-file [file {:keys [no-deps] :as optmap}]
   (binding [*cljs-files* (make-files-map (get-parent file))]
-    (compile-with-deps file)))
+    (compile-with-deps file optmap)))
 
-(defn -compile [file args]
+(defn -compile [file {:keys [no-deps as-lib] :as optmap}]
   (let [nsd (ns-decl file)]
     ;; Adding builtins
-    (println (slurp (io/resource "builtins.lua")))
+    (if-not no-deps (println (slurp (io/resource "builtins.lua"))))
     ;; Adding core.cljs
-    (compile-seq com/core-forms-seq)
+    (if-not no-deps (compile-seq com/core-forms-seq))
+    (if as-lib (println "-- CLJS/LUA " (second (nsd :form))))
     ;; Compile main file and deps
-    ((if nsd compile-root-file compile-file) file)))
+    ((if (and nsd (not no-deps)) compile-root-file compile-file) file optmap)))
 
-(defn -main [args]
+(defn remove-dots [s]
+  (.replaceAll (str s) "\\." "_"))
+
+(defn lib-file-name [src-file {:keys [as-lib]}]
+  (let [nsd (ns-decl src-file)
+        fname (if nsd
+                (remove-dots (comp/munge (second (nsd :form))))
+                (throw (Exception. "No ns decl")))]
+    (str (com/common-libs-path) com/file-sep fname ".cljlib")))
+
+(defn mk-out-file [src-file {:keys [out-file as-lib] :as optmap}]
+  (let [o
+        (if out-file out-file
+            (if as-lib (lib-file-name src-file optmap) *out*))]
+    (println o)
+    (io/writer o)))
+  
+(defn -main [src-file & {:keys [out-file as-lib] :as optmap}]
   (ana/with-core-macros "/cljs/lua/core"
     (binding [ana/*cljs-ns* 'cljs.user
               ana/*cljs-static-fns* true
               comp/*ns-emit-require* false]
-      (let [src-file (io/file (first args))]
+      (let [src-file (io/file src-file)]
         (if (.isDirectory src-file)
           (println "Input must be a cljsc file !")
-          (binding [*out* (if (second args) (io/writer (second args)) *out*)]
-            (-compile src-file args)))))))
+          (binding [*out* (mk-out-file src-file optmap)]
+            (-compile src-file (if as-lib (assoc optmap :no-deps true) optmap))))))))

@@ -30,3 +30,14 @@
 (defn new-env
   ([context] {:ns (@ana/namespaces ana/*cljs-ns*) :context context :locals {}})
   ([] (new-env :return)))
+
+(def file-sep java.io.File/separator)
+
+(defn get-cljs-dir []
+  (str (System/getProperty "user.home") file-sep ".cljslua"))
+
+(defn common-libs-path []
+  (str (get-cljs-dir) file-sep "libs"))
+
+(defn init-dirs []
+  (.mkdirs (io/file (common-libs-path))))

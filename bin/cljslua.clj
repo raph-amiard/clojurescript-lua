@@ -5,9 +5,13 @@
 (def commands {"compile" comp/-main
                "repl"    repl/-main})
 
-(let [args *command-line-args*
+(defn keywordize-args [args]
+  (for [arg args]
+    (if (.startsWith arg ":") (keyword (subs arg 1)) arg)))
+
+(let [args (keywordize-args *command-line-args*)
       cmd-func (commands (first args))]
   (conf/load-config)
   (if cmd-func
-    (cmd-func (rest args))
+    (apply cmd-func (rest args))
     (println "Unknown command : " (first args))))
