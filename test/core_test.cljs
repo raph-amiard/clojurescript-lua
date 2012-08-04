@@ -1,4 +1,5 @@
-(ns cljs.core-test)
+(ns cljs.core-test
+  (:require [cljs.macro-test :as macro-test]))
 
 (defn test-stuff []
   ;; js primitives
@@ -1528,5 +1529,6 @@
   )
 
 (test-stuff)
+(macro-test/test-macros)
 
 (defn a [b c] (+ b c))

@@ -23,5 +23,8 @@ if test $# -eq 0
 then
     echo "Usage: cljslua <command> args"
 else
+    if [ $1 == "compile" ]; then
+	CLJSC_CP=$CLJSC_CP:$( dirname "$2")
+    fi
     $JCMD -server -cp $CLJSC_CP clojure.main $DIR/bin/cljslua.clj $*
 fi
