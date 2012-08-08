@@ -185,7 +185,6 @@
 (defmacro emit-wrap [env & body]
   `(let [env# ~env]
      (when (= :return (:context env#))
-       (when *finalizer* (emits *finalizer* "();"))
        (emits "return "))
      ~@body
      (when-not (= :expr (:context env#)) (emitln ""))))
@@ -306,7 +305,6 @@
   [{:keys [throw env]}]
   (do
     (when (in-expr? env) (emits "(function()"))
-    (when *finalizer* (emits *finalizer* "();"))
     (emitln "error(" throw ")")
     (when (in-expr? env) (emits ")()"))))
 
@@ -551,18 +549,22 @@
         (emit-block subcontext statements newret))
       (emitln "end)")
       
-      (binding [*finalizer* (if finally finally-sym nil)]
         ;; Catch block
-        (let [finalize-call (when finally (str *finalizer* "()"))]
-          (emitln "if " success-sym " == false then")
-          (if (and name catch)
-            (let [{:keys [statements ret]} catch]
-              (emit-block subcontext statements ret))
-            (emitln finalize-call (when finalize-call ";") "error(" name ")"))
-          (emitln "else")
-          (emitln finalize-call)
+      (let [finalize-call (when finally (str finally-sym "()"))]
+        (emitln "if " success-sym " == false then")
+        (emitln "local success, catch_res = pcall(function() ")
+        (if (and name catch)
+          (let [{:keys [statements ret]} catch
+                newret (assoc-in ret [:env :context] :return)]
+            (emit-block subcontext statements newret))
+          (emitln finalize-call (when finalize-call ";") "error(" name ")"))
+        (emitln "end)")
+        (emitln finalize-call)
+        (emitln "if success == false then error(catch_res) else return catch_res end")
+        (emitln "else")
+        (emitln finalize-call)
           (when (or (in-expr? env) (= :return context)) (emitln "return " name))
-          (emitln "end")))
+          (emitln "end"))
       
       (when (= :expr context) (emits "end)()"))))
 
