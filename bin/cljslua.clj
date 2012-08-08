@@ -15,8 +15,8 @@
   (let [args (keywordize-args *command-line-args*)
         cmd-func (commands (first args))]
     (conf/load-config)
-    (comp/compile-core)
     (com/init-dirs)
+    (comp/compile-core)
     (if cmd-func
       (apply cmd-func (rest args))
       (println "Unknown command : " (first args)))))
