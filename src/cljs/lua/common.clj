@@ -41,3 +41,5 @@
 
 (defn init-dirs []
   (.mkdirs (io/file (common-libs-path))))
+
+(def core-lib-path (str (common-libs-path) file-sep "core.cljlib"))

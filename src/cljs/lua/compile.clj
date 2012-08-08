@@ -16,6 +16,9 @@
 
 (def ^:dynamic *cljs-files*)
 
+(defn emit-lib-header [ns]
+  (println "-- CLJS/LUA " ns))
+
 (defn files-in
   "Return a sequence of all files with given extension in the given directory."
   [ext dir]
@@ -81,8 +84,8 @@
     ;; Adding builtins
     (if-not no-deps (println (slurp (io/resource "builtins.lua"))))
     ;; Adding core.cljs
-    (if-not no-deps (compile-seq com/core-forms-seq))
-    (if as-lib (println "-- CLJS/LUA " (second (nsd :form))))
+    (if-not no-deps (println (slurp com/core-lib-path)))
+    (if as-lib (emit-lib-header (second (nsd :form))))
     ;; Compile main file and deps
     ((if (and nsd (not no-deps)) compile-root-file compile-file) file optmap)))
 
@@ -104,7 +107,6 @@
     (io/writer o)))
   
 (defn -main [src-file & {:keys [out-file as-lib] :as optmap}]
-  (ana/with-core-macros "/cljs/lua/core"
     (binding [ana/*cljs-ns* 'cljs.user
               ana/*cljs-static-fns* true
               comp/*ns-emit-require* false]
@@ -112,4 +114,15 @@
         (if (.isDirectory src-file)
           (println "Input must be a cljsc file !")
           (binding [*out* (mk-out-file src-file optmap)]
-            (-compile src-file (if as-lib (assoc optmap :no-deps true) optmap))))))))
+            (-compile src-file (if as-lib (assoc optmap :no-deps true) optmap)))))))
+
+(defn compile-core []
+  (let [core-lib (io/file com/core-lib-path)]
+    (when-not (.exists core-lib)
+      (println "Compiling core ...")
+      (binding [ana/*cljs-ns* 'cljs.user
+                ana/*cljs-static-fns* true
+                comp/*ns-emit-require* false
+                *out* (io/writer core-lib)]
+        (emit-lib-header 'cljs.core)
+        (compile-seq com/core-forms-seq)))))

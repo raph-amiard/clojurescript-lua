@@ -50,76 +50,79 @@
     (.waitFor (.exec (Runtime/getRuntime) (str "mkfifo " pipe-path)))
     (File. pipe-path)))
 
-(defn -main [args]
-  (ana/with-core-macros "/cljs/lua/core"
-    (println "Cljs/Lua repl")    
-    (binding [ana/*cljs-ns* 'cljs.user
-              ana/*cljs-static-fns* true
-              *repl-verbose* false
-              *repl-exec* true
-              *lua-interp* (conf/get :repl :lua-runtime)]
-      (let [;; Lua subprocess
-            pb (ProcessBuilder. [*lua-interp* "cljs/exec_server.lua"])
-            lua-process (.start pb)
-            
-            ;; Read lua stdout
-            rdr (io/reader (.getInputStream lua-process))
+(defn -main [& args]
+  (println "Cljs/Lua repl")    
+  (binding [ana/*cljs-ns* 'cljs.user
+            ana/*cljs-static-fns* true
+            *repl-verbose* false
+            *repl-exec* true
+            *lua-interp* (conf/get :repl :lua-runtime)]
+    (let [;; Lua subprocess
+          pb (ProcessBuilder. [*lua-interp* "cljs/exec_server.lua"])
+          lua-process (.start pb)
+          
+          ;; Read lua stdout
+          rdr (io/reader (.getInputStream lua-process))
 
-            ;; Named pipes to communicate with lua subproc
-            pipe-in (create-named-pipe "ltj") 
-            pipe-out (create-named-pipe "jtl")
-            pipe-rdr (future (io/reader pipe-in))
-            pipe-wr (future (io/writer pipe-out))
+          ;; Named pipes to communicate with lua subproc
+          pipe-in (create-named-pipe "ltj") 
+          pipe-out (create-named-pipe "jtl")
+          pipe-rdr (future (io/reader pipe-in))
+          pipe-wr (future (io/writer pipe-out))
 
-            ;; Function to analyze a form, emit lua code,
-            ;; pass it to the lua subproc, and get back the result
-            eval-form (fn [env form]
-                        (let [lua-code (with-out-str (comp/emit (ana/analyze env form)))]
-                          (when *repl-verbose*
-                            (println "---- LUA CODE ----")
-                            (println lua-code))
-                          (when *repl-exec*
-                            (binding [*out* @pipe-wr]
-                              (println (json/json-str {:action :exec :body lua-code})))
-                            (let [resp (json/read-json (.readLine @pipe-rdr))]
-                              (if (= (:status resp) "OK")
-                                (when *repl-show-result* (println (:body resp)))
-                                (do
-                                  (println "ERROR : " (:body resp))
-                                  (when *error-fatal?*
-                                    (println lua-code)
-                                    )))))))]
+          ;; Function to analyze a form, emit lua code,
+          ;; pass it to the lua subproc, and get back the result
+          eval-form (fn [env form]
+                      (let [lua-code (with-out-str (comp/emit (ana/analyze env form)))]
+                        (when *repl-verbose*
+                          (println "---- LUA CODE ----")
+                          (println lua-code))
+                        (when *repl-exec*
+                          (binding [*out* @pipe-wr]
+                            (println (json/json-str {:action :exec :body lua-code})))
+                          (let [resp (json/read-json (.readLine @pipe-rdr))]
+                            (if (= (:status resp) "OK")
+                              (when *repl-show-result* (println (:body resp)))
+                              (do
+                                (println "ERROR : " (:body resp))
+                                (when *error-fatal?*
+                                  (println lua-code)
+                                  )))))))]
 
-        ;; Redirect everything from subprocess stdout to own stdout
-        (.start (Thread. (fn [] (while true (let [l (.readLine rdr)] (when l (println l)))))))
+      ;; Redirect everything from subprocess stdout to own stdout
+      (.start (Thread. (fn [] (while true (let [l (.readLine rdr)] (when l (println l)))))))
 
-        (try (do
-               (.exitValue lua-process)
-               (println "Lua subprocess has exited prematurely, verify you have lua installed, and required libraries : lua-json and lua-bitops")
-               (System/exit 0))
-             (catch Exception e))
+      (try (do
+             (.exitValue lua-process)
+             (println "Lua subprocess has exited prematurely, verify you have lua installed, and required libraries : lua-json and lua-bitops")
+             (System/exit 0))
+           (catch Exception e))
 
-        ;; Send it the two pipes names
-        (binding [*out* (PrintWriter. (.getOutputStream lua-process))]
-          (println (.getCanonicalPath pipe-in))
-          (println (.getCanonicalPath pipe-out)))
+      ;; Send it the two pipes names
+      (binding [*out* (PrintWriter. (.getOutputStream lua-process))]
+        (println (.getCanonicalPath pipe-in))
+        (println (.getCanonicalPath pipe-out)))
 
-        ;; Eval core.cljs forms
-        (binding [*repl-verbose* false
-                  *repl-show-result* false
-                  *error-fatal?* true]
-          (eval-core-forms eval-form -1))
-        
-        ;; Eval common ns forms
-        (eval-form (nenv) '(ns cljs.user))
-        
-        ;; Repl loop
-        (while true
-          (.print System/out (str ana/*cljs-ns* " > "))
-          (.flush (System/out))
-          (let [env (nenv)
-                form (read)
-                special-fn? (and (seq? form) (contains? special-fns-set (first form)))]
-            (if special-fn?
-              (println (apply (special-fns (first form)) eval-form (rest form)))
-              (eval-form env form))))))))
+      ;; Eval core.cljs forms
+      (binding [*repl-verbose* false
+                *repl-show-result* false
+                *error-fatal?* true]
+        (eval-core-forms eval-form -1))
+      
+      ;; Eval common ns forms
+      (eval-form (nenv) '(ns cljs.user))
+      
+      ;; Repl loop
+      (while true
+        (.print System/out (str ana/*cljs-ns* " > "))
+        (.flush (System/out))
+        (let [env (nenv)
+              form (read)
+              special-fn? (and (seq? form) (contains? special-fns-set (first form)))]
+          (if special-fn?
+            (println (apply (special-fns (first form)) eval-form (rest form)))
+            (try (eval-form env form)
+                 (catch Exception e
+                   (.printStackTrace e))
+                 (catch AssertionError a
+                   (.printStackTrace a)))))))))
